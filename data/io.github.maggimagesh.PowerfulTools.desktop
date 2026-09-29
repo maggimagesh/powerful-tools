@@ -1,0 +1,29 @@
+[Desktop Entry]
+Type=Application
+Name=Powerful Tools
+GenericName=Desktop Utilities
+Comment=Color picker, text extractor, bulk rename, image resizer, launcher, awake and more
+Exec=powerful-tools
+Icon=powerful-tools
+Terminal=false
+Categories=Utility;GTK;
+Keywords=utilities;color;picker;ocr;text;rename;resize;image;hosts;awake;launcher;ruler;shortcut;
+StartupNotify=true
+StartupWMClass=powerful-tools
+Actions=run;colorpicker;textextractor;ruler;
+
+[Desktop Action run]
+Name=Quick Launcher
+Exec=powerful-tools --run
+
+[Desktop Action colorpicker]
+Name=Pick a Color
+Exec=powerful-tools --pick-color
+
+[Desktop Action textextractor]
+Name=Extract Text from Screen
+Exec=powerful-tools --text-extract
+
+[Desktop Action ruler]
+Name=Screen Ruler
+Exec=powerful-tools --ruler

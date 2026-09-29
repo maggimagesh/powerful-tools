@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+    python3 -m compileall -q /usr/lib/powerful-tools >/dev/null 2>&1 || true
+fi
+exit 0

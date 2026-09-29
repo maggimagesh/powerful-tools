@@ -1,0 +1,42 @@
+.TH POWERFUL-TOOLS 1 "September 2026" "1.0.0" "User Commands"
+.SH NAME
+powerful-tools \- Powerful Tools desktop utilities
+.SH SYNOPSIS
+.B powerful-tools
+[\fIOPTION\fR] [\fIFILES\fR...]
+.SH DESCRIPTION
+Opens the Powerful Tools window, or runs one tool directly. Only one
+instance runs; further invocations are passed to it.
+.SH OPTIONS
+.TP
+.B \-\-run
+Open the Quick Launcher launcher.
+.TP
+.B \-\-pick\-color
+Pick a color from the screen.
+.TP
+.B \-\-text\-extract
+Select a screen area and copy its text (OCR).
+.TP
+.B \-\-ruler
+Open the Screen Ruler.
+.TP
+.B \-\-always\-on\-top
+Toggle always-on-top for the focused window (X11).
+.TP
+.B \-\-advanced\-paste
+Open Advanced Paste.
+.TP
+.B \-\-shortcut\-guide
+Open the Shortcut Guide.
+.TP
+.BR \-\-peek ", " \-\-rename ", " \-\-resize ", " \-\-unlocker " " \fIFILES\fR
+Preview, bulk rename, resize or check locks of FILES.
+.TP
+.BI \-\-page " NAME"
+Open a tool page, for example hosts or envvars.
+.TP
+.B \-\-version
+Show the version.
+.SH FILES
+~/.config/powerful-tools/settings.json

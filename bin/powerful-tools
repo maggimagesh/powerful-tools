@@ -1,0 +1,31 @@
+#!/usr/bin/python3
+"""Powerful Tools launcher."""
+import os
+import sys
+
+# Launched from a snap (e.g. the VS Code terminal)? Restore the real desktop environment,
+# otherwise GTK loads the snap's incompatible modules.
+for _k in [k for k in os.environ if k.endswith('_VSCODE_SNAP_ORIG')]:
+    _name, _val = _k[:-len('_VSCODE_SNAP_ORIG')], os.environ.pop(_k)
+    if _val:
+        os.environ[_name] = _val
+    else:
+        os.environ.pop(_name, None)
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+for lib in (os.path.join(HERE, '..', 'lib', 'powerful-tools'), os.path.join(HERE, '..', 'src')):
+    if os.path.isdir(os.path.join(lib, 'powerfultools')):
+        sys.path.insert(0, os.path.abspath(lib))
+        break
+
+if len(sys.argv) > 1 and sys.argv[1] == '--unlocker-scan':
+    # runs as root through pkexec, without a display: no GTK here
+    import json
+    from powerfultools import logic
+    res, denied = logic.find_lockers(sys.argv[2:])
+    print(json.dumps({'results': res, 'denied': denied}))
+    sys.exit(0)
+
+from powerfultools.app import main  # noqa: E402
+
+sys.exit(main(entry=os.path.realpath(__file__)))

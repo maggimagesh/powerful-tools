@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint-and-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install pyflakes
+      - run: pyflakes src tests bin/powerful-tools
+      - run: python3 tests/test_logic.py
+
+  package:
+    needs: lint-and-unit
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu: ['18.04', '20.04', '22.04', '24.04']
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./build.sh
+      - name: Install the .deb in Ubuntu ${{ matrix.ubuntu }} and run all tests as a normal user
+        run: tests/docker_test.sh ${{ matrix.ubuntu }}
+      - name: Always On Top against a real window manager
+        run: tests/docker_aot.sh ${{ matrix.ubuntu }}
+      - uses: actions/upload-artifact@v4
+        if: matrix.ubuntu == '24.04'
+        with:
+          name: powerful-tools-deb
+          path: dist/*.deb

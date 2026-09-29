@@ -1,0 +1,28 @@
+name: Release
+
+# Push a tag such as v1.0.0 to build the .deb and publish it as a GitHub Release download.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag matches the app version
+        run: |
+          v=$(sed -n "s/^VERSION = '\(.*\)'/\1/p" src/powerfultools/core.py)
+          test "v$v" = "${GITHUB_REF_NAME}" || { echo "Tag ${GITHUB_REF_NAME} does not match version $v"; exit 1; }
+      - run: ./build.sh
+      - run: tests/docker_test.sh 18.04 && tests/docker_test.sh 24.04
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/*.deb \
+            --title "Powerful Tools ${GITHUB_REF_NAME#v}" \
+            --notes "Install: \`sudo apt install ./$(basename dist/*.deb)\`"

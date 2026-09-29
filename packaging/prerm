@@ -1,0 +1,4 @@
+#!/bin/sh
+set -e
+find /usr/lib/powerful-tools -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
+exit 0
