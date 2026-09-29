@@ -356,6 +356,12 @@ def t_unlocker(app, win):
 
 
 def t_keyboard(app, win):
+    tools = set(c.ID for c in A.PAGES) - {'general'}
+    covered = set(a[0] for a in A.keyboard.ACTIONS) | {'launcher', 'screenruler', 'alwaysontop', 'advancedpaste',
+                                                        'shortcutguide'}
+    check('Every tool has a shortcut', tools <= covered, tools - covered)
+    check('Every page shortcut is a valid page', all(a[2].split()[1] in tools for a in A.keyboard.ACTIONS
+                                                     if a[2].startswith('--page')))
     if not core.keybindings_supported():
         p = win.show_page('keyboard')
         check('Keyboard Manager falls back without GNOME schemas', not p.kb_ok)
@@ -466,6 +472,10 @@ def t_cli(app, win):
     check('CLI --rename opens Bulk Rename with files', win.current == 'bulkrename'
           and '/tmp' in win.pages['bulkrename'].paths)
     win.pages['bulkrename'].clear()
+    app.handle(A.build_parser().parse_args(['--toggle-awake']), [])
+    on = app.awake.active and app.awake.held
+    app.handle(A.build_parser().parse_args(['--toggle-awake']), [])
+    check('CLI --toggle-awake turns Awake on and off', on and not app.awake.active and not app.awake.held)
     app.handle(A.build_parser().parse_args(['--page', 'hosts']), [])
     check('CLI --page', win.current == 'hosts')
 

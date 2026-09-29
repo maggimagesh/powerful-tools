@@ -319,6 +319,7 @@ def build_parser():
     g.add_argument('--text-extract', action='store_true', help='capture text from the screen (OCR)')
     g.add_argument('--ruler', action='store_true', help='open the Screen Ruler')
     g.add_argument('--always-on-top', action='store_true', help='toggle always-on-top for the focused window')
+    g.add_argument('--toggle-awake', action='store_true', help='keep the computer awake, or stop doing so')
     g.add_argument('--advanced-paste', action='store_true', help='open Advanced Paste')
     g.add_argument('--shortcut-guide', action='store_true', help='open the Shortcut Guide')
     g.add_argument('--peek', action='store_true', help='preview FILES')
@@ -400,6 +401,12 @@ class Application(Gtk.Application):
                 self.pins.toggle()
             else:
                 self.open_page('alwaysontop')
+        elif ns.toggle_awake:
+            on = self.awake.toggle()
+            n = Gio.Notification.new('Awake is on' if on else 'Awake is off')
+            n.set_body('The computer stays awake until you press the shortcut again.' if on
+                       else 'The computer follows its normal power settings.')
+            self.send_notification('awake', n)
         elif ns.advanced_paste:
             self.open_page('advancedpaste')
         elif ns.shortcut_guide:

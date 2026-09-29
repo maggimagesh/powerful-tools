@@ -160,6 +160,8 @@ powerful-tools --pick-color       pick a color from the screen
 powerful-tools --text-extract     copy text from the screen
 powerful-tools --ruler            measure on screen
 powerful-tools --always-on-top    pin or unpin the focused window
+powerful-tools --toggle-awake     keep the computer awake, or stop
+powerful-tools --page NAME        open a tool, e.g. hosts, envvars, peek
 powerful-tools --rename FILES     bulk-rename files (also --resize, --unlocker, --peek)
 powerful-tools --help             list all options
 ```

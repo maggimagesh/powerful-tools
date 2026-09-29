@@ -14,7 +14,7 @@ from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk  # noqa: E402
 
 APP_ID = 'io.github.maggimagesh.PowerfulTools'
 APP_NAME = 'Powerful Tools'
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 CONFIG_DIR = os.path.join(GLib.get_user_config_dir(), 'powerful-tools')
 ENTRY = shutil.which('powerful-tools') or 'powerful-tools'  # replaced by app.main()
 

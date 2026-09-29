@@ -27,6 +27,7 @@ class AwakeController(object):
         self.end = None
         self.timer = 0
         self.listeners = []
+        self.held = False
 
     @property
     def active(self):
@@ -88,7 +89,22 @@ class AwakeController(object):
         self._changed()
         return True
 
+    def toggle(self):
+        """Keyboard shortcut: keep awake indefinitely, or turn it off. Returns the new state."""
+        if self.active:
+            self.stop()
+        else:
+            self.start(None, self.app.settings.get('awake_screen_on', True))
+        return self.active
+
     def _changed(self):
+        # keep running in the background while awake, even with no window open
+        if self.active and not self.held:
+            self.app.hold()
+            self.held = True
+        elif not self.active and self.held:
+            self.app.release()
+            self.held = False
         for cb in self.listeners:
             cb()
 
@@ -195,5 +211,9 @@ class AwakePage(core.Page):
                 self._busy = False
         else:
             rem = c.remaining()
+            if self.r_off.get_active():  # turned on by the keyboard shortcut
+                self._busy = True
+                self.r_inf.set_active(True)
+                self._busy = False
             self.status.set_text('Status: keeping awake' + (' indefinitely' if rem is None
                                                             else ' for %s more' % fmt_secs(rem)))

@@ -13,6 +13,16 @@ ACTIONS = [
     ('aot', 'Always On Top (toggle focused window)', '--always-on-top', '<Primary><Super>t'),
     ('paste', 'Advanced Paste', '--advanced-paste', '<Shift><Super>v'),
     ('guide', 'Shortcut Guide', '--shortcut-guide', '<Shift><Super>slash'),
+    ('awake', 'Awake (toggle keep awake)', '--toggle-awake', '<Shift><Super>a'),
+    # tools that work on files or settings: the shortcut opens their page
+    ('bulkrename', 'Bulk Rename', '--page bulkrename', '<Shift><Super>r'),
+    ('imageresizer', 'Image Resizer', '--page imageresizer', '<Shift><Super>i'),
+    ('fileunlocker', 'File Unlocker', '--page fileunlocker', '<Shift><Super>u'),
+    ('peek', 'Peek', '--page peek', '<Shift><Super>p'),
+    ('keyboard', 'Keyboard Manager', '--page keyboard', '<Shift><Super>k'),
+    ('hosts', 'Hosts File Editor', '--page hosts', '<Shift><Super>h'),
+    ('envvars', 'Environment Variables', '--page envvars', '<Shift><Super>e'),
+    ('templates', 'File Templates', '--page templates', '<Shift><Super>n'),
 ]
 
 REMAPS = [
@@ -120,9 +130,13 @@ class KeyboardPage(core.Page):
         existing = core.list_custom_keybindings()
         for c in self.actions_box.get_children():
             c.destroy()
+        heading = False
         for aid, title, flag, default in ACTIONS:
+            if flag.startswith('--page') and not heading:
+                heading = True
+                self.actions_box.pack_start(core.label('Open a tool', 'pt-heading'), False, False, 0)
             cmd = action_command(flag)
-            kb = next((k for k in existing if k['command'].split()[-1:] == [flag]
+            kb = next((k for k in existing if k['command'].endswith(' ' + flag)
                        and 'powerful-tools' in k['command']), None)
             box = Gtk.Box(spacing=6)
             box.pack_start(core.button('Change' if kb else 'Enable',
