@@ -18,7 +18,7 @@ src/powerfultools/        the application (one module per tool)
 data/                     desktop entry, icon, man page
 packaging/                Debian control files
 tests/                    unit, GUI and container tests
-build.sh                  builds dist/powerful-tools_<version>_all.deb
+build.sh                  builds dist/powerful_tools_<version>.deb
 ```
 
 ## Guidelines

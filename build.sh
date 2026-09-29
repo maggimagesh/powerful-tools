@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build dist/powerful-tools_<version>_all.deb.
+# Build dist/powerful_tools_<version>.deb (the package itself is named powerful-tools).
 # xz compression keeps the package readable by dpkg on Ubuntu 18.04 (it cannot read zstd).
 set -eu
 umask 022
@@ -22,6 +22,6 @@ install -m755 packaging/postinst packaging/prerm $R/DEBIAN/
 SIZE=$(du -sk --exclude=DEBIAN $R | cut -f1)
 sed -e "s/@SIZE@/$SIZE/" -e "s/@VERSION@/$VERSION/" packaging/control > $R/DEBIAN/control
 (cd $R && find usr -type f -exec md5sum {} + > DEBIAN/md5sums)
-OUT=dist/powerful-tools_${VERSION}_all.deb
+OUT=dist/powerful_tools_${VERSION}.deb
 dpkg-deb --root-owner-group -Zxz --build $R "$OUT" >/dev/null
 echo "$OUT"

@@ -61,11 +61,18 @@ jobs:
           TAG="v$V"
           DEB=$(ls dist/*.deb)
           # shellcheck disable=SC2016  # the backticks are literal Markdown
-          printf 'Built automatically from commit %s on main after all tests passed on Ubuntu 18.04, 20.04, 22.04 and 24.04.\n\nInstall:\n```\nsudo apt install ./%s\n```\n' \
+          printf 'Built from commit %s on main after all tests passed on Ubuntu 18.04, 20.04, 22.04 and 24.04.\n\nInstall:\n```\nsudo apt install ./%s\n```\n' \
             "${GITHUB_SHA:0:7}" "$(basename "$DEB")" > notes.md
+          # a newer commit reached main while this run was testing: let that run publish instead
+          if [ "$(git ls-remote origin refs/heads/main | cut -f1)" != "$GITHUB_SHA" ]; then
+            echo "main has moved on; skipping publish for this older commit"; exit 0
+          fi
           git tag -f "$TAG" "$GITHUB_SHA"
           git push -f origin "refs/tags/$TAG"
           if gh release view "$TAG" >/dev/null 2>&1; then
+            # remove .deb files with other names (e.g. an older naming scheme) so only one remains
+            gh release view "$TAG" --json assets -q '.assets[].name' | grep '\.deb$' | grep -vxF "$(basename "$DEB")" \
+              | while read -r old; do gh release delete-asset "$TAG" "$old" --yes; done
             gh release upload "$TAG" "$DEB" --clobber
             gh release edit "$TAG" --notes-file notes.md --latest
           else
