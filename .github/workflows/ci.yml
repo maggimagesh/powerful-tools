@@ -10,7 +10,7 @@ jobs:
   lint-and-unit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: pip install pyflakes
       - run: pyflakes src tests bin/powerful-tools
       - run: python3 tests/test_logic.py
@@ -23,7 +23,7 @@ jobs:
       matrix:
         ubuntu: ['18.04', '20.04', '22.04', '24.04']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: ./build.sh
       - name: Install the .deb in Ubuntu ${{ matrix.ubuntu }} and run all tests as a normal user
         run: tests/docker_test.sh ${{ matrix.ubuntu }}
