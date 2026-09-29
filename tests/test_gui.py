@@ -362,6 +362,17 @@ def t_keyboard(app, win):
     check('Every tool has a shortcut', tools <= covered, tools - covered)
     check('Every page shortcut is a valid page', all(a[2].split()[1] in tools for a in A.keyboard.ACTIONS
                                                      if a[2].startswith('--page')))
+    kbm = A.keyboard
+    kbm.FM_ACCELS = os.path.join(HOME, 'scripts-accels')
+    with open(kbm.FM_ACCELS, 'w') as f:
+        f.write('; comment\nF4 Other Script\n')
+    kbm.set_fm_accel('<Primary><Shift>dollar')
+    kbm.set_fm_accel('<Shift><Super>p')
+    check('Peek shortcut stored for Files', kbm.get_fm_accel() == '<Shift><Super>p'
+          and open(kbm.FM_ACCELS).read() == '; comment\nF4 Other Script\n<Shift><Super>p Powerful Tools Peek\n',
+          open(kbm.FM_ACCELS).read())
+    kbm.set_fm_accel('')
+    check('Peek shortcut removed from Files', kbm.get_fm_accel() == '' and 'Other Script' in open(kbm.FM_ACCELS).read())
     if not core.keybindings_supported():
         p = win.show_page('keyboard')
         check('Keyboard Manager falls back without GNOME schemas', not p.kb_ok)

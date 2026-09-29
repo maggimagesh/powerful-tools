@@ -61,6 +61,13 @@ def migrate_legacy():
                 flag = parts[1] if len(parts) > 1 else ''
                 name = 'Powerful Tools: ' + titles.get(flag, flag or 'Open')
                 core.set_custom_keybinding(name, ' '.join([core.ENTRY] + parts[1:]), k['binding'], k['path'])
+        if keyboard.fm_accels_supported():  # a global Peek shortcut can't see the selected files: move it to Files
+            for k in core.list_custom_keybindings():
+                if k['command'].endswith(' --page peek') and 'powerful-tools' in k['command']:
+                    install_fm_scripts()
+                    if not keyboard.get_fm_accel():
+                        keyboard.set_fm_accel(k['binding'])
+                    core.remove_custom_keybinding(k['path'])
     old = [os.path.join(os.path.expanduser(d), n) for d in FM_DIRS for n in LEGACY_FM_SCRIPTS]
     old = [p for p in old if os.path.exists(p)]
     if old:

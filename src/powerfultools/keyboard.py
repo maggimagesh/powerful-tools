@@ -1,6 +1,7 @@
+import os
 import shutil
 
-from gi.repository import Gtk
+from gi.repository import GLib, Gtk
 
 from . import core
 
@@ -36,6 +37,41 @@ REMAPS = [
     ('shift:both_capslock', 'Both Shift keys together toggle Caps Lock', 'shift'),
 ]
 INPUT_SOURCES = 'org.gnome.desktop.input-sources'
+
+# Files (Nautilus) runs a script on the selected files when its shortcut is pressed. A global shortcut can't
+# see the selection, so on Nautilus the Peek shortcut lives here instead of in the desktop keybindings.
+PEEK_SCRIPT = 'Powerful Tools Peek'
+FM_ACCELS = os.path.join(GLib.get_user_config_dir(), 'nautilus', 'scripts-accels')
+
+
+def fm_accels_supported():
+    return bool(shutil.which('nautilus'))
+
+
+def _fm_accel_lines():
+    try:
+        with open(FM_ACCELS) as f:
+            return f.read().splitlines()
+    except OSError:
+        return []
+
+
+def _is_script_line(line, script):
+    parts = line.split(' ', 1)
+    return not line.startswith(';') and len(parts) == 2 and parts[1] == script
+
+
+def get_fm_accel(script=PEEK_SCRIPT):
+    return next((l.split(' ', 1)[0] for l in _fm_accel_lines() if _is_script_line(l, script)), '')
+
+
+def set_fm_accel(accel, script=PEEK_SCRIPT):
+    lines = [l for l in _fm_accel_lines() if not _is_script_line(l, script)]
+    if accel:
+        lines.append('%s %s' % (accel, script))
+    os.makedirs(os.path.dirname(FM_ACCELS), exist_ok=True)
+    with open(FM_ACCELS, 'w') as f:
+        f.write(''.join(l + '\n' for l in lines))
 
 
 def action_command(flag):
@@ -138,6 +174,10 @@ class KeyboardPage(core.Page):
             cmd = action_command(flag)
             kb = next((k for k in existing if k['command'].endswith(' ' + flag)
                        and 'powerful-tools' in k['command']), None)
+            fm = aid == 'peek' and fm_accels_supported()
+            if fm:
+                accel = get_fm_accel()
+                kb = {'binding': accel, 'path': None, 'fm': True} if accel else None
             box = Gtk.Box(spacing=6)
             box.pack_start(core.button('Change' if kb else 'Enable',
                                        lambda t=title, c=cmd, k=kb, d=default: self._set_action(t, c, k, d)),
@@ -146,6 +186,8 @@ class KeyboardPage(core.Page):
                 box.pack_start(core.button('', lambda k=kb: self._remove(k), 'user-trash-symbolic',
                                            tooltip='Remove shortcut'), False, False, 0)
             sub = core.accel_label(kb['binding']) if kb else 'Off (suggested: %s)' % core.accel_label(default)
+            if fm:
+                sub += ' · select files in Files, then press it'
             self.actions_box.pack_start(core.row(title, sub, box), False, False, 0)
         self.actions_box.show_all()
         for c in self.custom_box.get_children():
@@ -170,6 +212,13 @@ class KeyboardPage(core.Page):
             return
         if self._conflict(accel, kb):
             return
+        if cmd.endswith(' --page peek') and fm_accels_supported():
+            from . import app
+            app.install_fm_scripts()
+            set_fm_accel(accel)
+            self.toast('%s shortcut set to %s. Restart Files (nautilus -q) to use it' % (title, core.accel_label(accel)))
+            self.refresh()
+            return
         core.set_custom_keybinding('Powerful Tools: ' + title, cmd, accel, kb['path'] if kb else None)
         self.toast('%s shortcut set to %s' % (title, core.accel_label(accel)))
         self.refresh()
@@ -182,7 +231,10 @@ class KeyboardPage(core.Page):
         return False
 
     def _remove(self, kb):
-        core.remove_custom_keybinding(kb['path'])
+        if kb.get('fm'):
+            set_fm_accel('')
+        else:
+            core.remove_custom_keybinding(kb['path'])
         self.toast('Shortcut removed')
         self.refresh()
 
