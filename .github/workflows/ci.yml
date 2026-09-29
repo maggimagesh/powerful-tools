@@ -34,3 +34,40 @@ jobs:
         with:
           name: powerful-tools-deb
           path: dist/*.deb
+
+  # Every push to main that passes all tests updates the download on the Releases page.
+  # The release is named after VERSION in src/powerfultools/core.py (e.g. v1.0.0): the .deb on it
+  # is replaced and its tag moved to this commit. Bump VERSION to start a new release.
+  publish:
+    needs: package
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: publish-release
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: powerful-tools-deb
+          path: dist
+      - name: Create or update the release for this version
+        run: |
+          V=$(sed -n "s/^VERSION = '\(.*\)'/\1/p" src/powerfultools/core.py)
+          TAG="v$V"
+          DEB=$(ls dist/*.deb)
+          # shellcheck disable=SC2016  # the backticks are literal Markdown
+          printf 'Built automatically from commit %s on main after all tests passed on Ubuntu 18.04, 20.04, 22.04 and 24.04.\n\nInstall:\n```\nsudo apt install ./%s\n```\n' \
+            "${GITHUB_SHA:0:7}" "$(basename "$DEB")" > notes.md
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$DEB" --clobber
+            gh release edit "$TAG" --notes-file notes.md --latest
+          else
+            gh release create "$TAG" "$DEB" --title "Powerful Tools $V" --notes-file notes.md --latest
+          fi
