@@ -25,7 +25,7 @@ def is_text_file(path, ctype):
             head = f.read(8192)
     except OSError:
         return False
-    if not head or b'\0' in head:
+    if b'\0' in head:  # an empty file is empty text, whatever type its name suggests
         return False
     try:
         head.decode('utf-8')
