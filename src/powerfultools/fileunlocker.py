@@ -2,22 +2,39 @@ import json
 import os
 import shutil
 import signal
-import sys
 
 from gi.repository import GLib, Gtk, Pango
 
 from . import core, logic
 
 
+def root_safe(path):
+    """True if only root can change this file: it and every folder above it belong to root and nobody else
+    may write to them."""
+    path = os.path.realpath(path)
+    while True:
+        try:
+            st = os.stat(path)
+        except OSError:
+            return False
+        if st.st_uid != 0 or st.st_mode & 0o022:
+            return False
+        if path == '/':
+            return True
+        path = os.path.dirname(path)
+
+
 def scan_as_root(paths):
     """Run the scan through pkexec (asks for the admin password). Returns (results, error)."""
-    if not shutil.which('pkexec'):
+    pkexec = core.system_bin('pkexec')
+    if not pkexec:
         return None, 'pkexec is not installed'
-    entry = core.ENTRY if os.path.isabs(core.ENTRY) else shutil.which(core.ENTRY)
-    cmd = ['pkexec', entry, '--unlocker-scan'] + paths
-    if entry and entry.endswith('.py'):
-        cmd = ['pkexec', sys.executable, entry, '--unlocker-scan'] + paths
-    rc, out, err = core.run(cmd, timeout=300)
+    entry = os.path.realpath(core.ENTRY if os.path.isabs(core.ENTRY) else shutil.which(core.ENTRY) or core.ENTRY)
+    # root runs this program and the code it imports: never from a place an ordinary user can write to
+    code = [entry, logic.__file__, os.path.join(os.path.dirname(logic.__file__), '__init__.py')]
+    if not all(root_safe(p) for p in code):
+        return None, 'Scanning as administrator needs the installed package (%s is not owned by root)' % entry
+    rc, out, err = core.run([pkexec, entry, '--unlocker-scan'] + paths, timeout=300)
     if rc in (126, 127):
         return None, 'Authentication was cancelled'
     if rc != 0:
@@ -71,7 +88,7 @@ class FileUnlockerPage(core.Page):
 
     def _set_enabled(self):
         self.scan_btn.set_sensitive(bool(self.targets))
-        self.root_btn.set_sensitive(bool(self.targets) and bool(shutil.which('pkexec')))
+        self.root_btn.set_sensitive(bool(self.targets) and bool(core.system_bin('pkexec')))
         self.targets_label.set_text('\n'.join(self.targets) or 'Nothing selected. Drop files or folders here.')
 
     def add_paths(self, paths):
@@ -117,15 +134,25 @@ class FileUnlockerPage(core.Page):
         if not core.confirm(self.window, 'End "%s" (PID %d)?' % (name, pid),
                             'Unsaved work in that program will be lost.', 'End process'):
             return
+        try:  # the process may have ended since the scan and its number been given to another program
+            with open('/proc/%d/comm' % pid) as f:
+                same = f.read().strip() == name
+        except OSError:
+            same = False
+        if not same:
+            self.toast('That process has already ended')
+            self.scan()
+            return
         try:
             os.kill(pid, signal.SIGTERM)
         except ProcessLookupError:
             pass
         except PermissionError:
-            if not shutil.which('pkexec'):
+            pkexec, kill = core.system_bin('pkexec'), core.system_bin('kill')
+            if not pkexec or not kill:
                 self.toast('Permission denied', error=True)
                 return
-            rc, _o, err = core.run(['pkexec', 'kill', '-TERM', str(pid)], timeout=120)
+            rc, _o, err = core.run([pkexec, kill, '-TERM', str(pid)], timeout=120)
             if rc != 0:
                 self.toast('Could not end the process: %s' % (err.strip() or 'cancelled'), error=True)
                 return

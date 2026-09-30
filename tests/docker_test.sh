@@ -19,15 +19,17 @@ desktop-file-validate /usr/share/applications/io.github.maggimagesh.PowerfulTool
 set +e
 useradd -m tester
 cp -r /w/tests /home/tester/tests && chown -R tester /home/tester/tests
+E="env -i PATH=/usr/bin:/bin HOME=/home/tester LANG=C.UTF-8 PT_SRC=/usr/lib/powerful-tools PT_SHOTS=/shots"
 runuser -u tester -- sh -c "cd /home/tester && powerful-tools --version && \
-  PT_SRC=/usr/lib/powerful-tools python3 tests/test_logic.py | tail -1 && \
-  env -i PATH=/usr/bin:/bin HOME=/home/tester LANG=C.UTF-8 PT_SRC=/usr/lib/powerful-tools PT_SHOTS=/shots \
-    xvfb-run -a -s \"-screen 0 3840x2160x24\" dbus-run-session -- python3 -u tests/test_gui.py" > /tmp/gui.log 2>&1
+  PT_SRC=/usr/lib/powerful-tools python3 tests/test_logic.py && \
+  $E xvfb-run -a -s \"-screen 0 3840x2160x24\" dbus-run-session -- python3 -u tests/test_gui.py" > /tmp/gui.log 2>&1
 rc=$?
+# attacks on every tool: each check passes when the attack is refused
+runuser -u tester -- sh -c "cd /home/tester && $E xvfb-run -a -s \"-screen 0 1920x1080x24\" python3 -u tests/test_security.py" >> /tmp/gui.log 2>&1 || rc=1
 [ $rc -ne 0 ] && ! grep -q "checks," /tmp/gui.log && tail -40 /tmp/gui.log
-grep -E "^(PASS|FAIL|[0-9]+ (checks|logic)|Powerful Tools)|UNCAUGHT" /tmp/gui.log
-# any GTK warning/critical from our own process is a failure
-if grep -E "\((python3|test_gui).*(CRITICAL|WARNING)" /tmp/gui.log; then echo "== GTK warnings found"; rc=1; fi
+grep -E "^(PASS|FAIL|[0-9]+ (checks|logic|security)|Powerful Tools)|UNCAUGHT|^(Traceback|AssertionError|  File )" /tmp/gui.log
+# any GTK warning/critical from our own process is a failure (a container has no notification service: not ours)
+if grep -E "\((python3|test_gui|test_security).*(CRITICAL|WARNING)" /tmp/gui.log | grep -v "unable to send notifications"; then echo "== GTK warnings found"; rc=1; fi
 dpkg -r powerful-tools >/dev/null && [ ! -e /usr/lib/powerful-tools ] && echo "== removed cleanly"
 exit $rc
 '

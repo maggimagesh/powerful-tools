@@ -1,4 +1,5 @@
 import os
+import tempfile
 import threading
 
 from gi.repository import GdkPixbuf, GLib, Gtk
@@ -14,7 +15,7 @@ IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/bmp', 'image/tiff', 'image/gif'
 
 def resize_file(path, opts):
     """Resize one image according to opts. Returns the output path. Raises on error."""
-    pb = GdkPixbuf.Pixbuf.new_from_file(path)
+    pb = core.load_pixbuf(path)
     pb = pb.apply_embedded_orientation() or pb
     sw, sh = pb.get_width(), pb.get_height()
     nw, nh, fw, fh = logic.compute_size(sw, sh, opts['w'], opts['h'], opts['mode'], opts['unit'],
@@ -42,9 +43,11 @@ def resize_file(path, opts):
     keys, vals = ([], [])
     if saver == 'jpeg':
         keys, vals = ['quality'], [str(int(opts['quality']))]
-    tmp = dest + '.pt-tmp'
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(dest), prefix='.pt-', suffix='.tmp')  # not a guessable name
+    os.close(fd)
     try:
         out.savev(tmp, saver, keys, vals)
+        os.chmod(tmp, os.stat(path).st_mode & 0o777)  # a private picture stays private
         os.replace(tmp, dest)
     finally:
         if os.path.exists(tmp):

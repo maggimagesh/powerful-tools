@@ -1,4 +1,5 @@
 import os
+import shlex
 import shutil
 
 from gi.repository import GLib, Gtk
@@ -12,6 +13,7 @@ ACTIONS = [
     ('textextractor', 'Text Extractor', '--text-extract', '<Shift><Super>t'),
     ('ruler', 'Screen Ruler', '--ruler', '<Shift><Super>m'),
     ('aot', 'Always On Top (toggle focused window)', '--always-on-top', '<Primary><Super>t'),
+    ('fancyzones', 'Fancy Zones (arrange focused window)', '--zones', '<Shift><Super>z'),
     ('paste', 'Advanced Paste', '--advanced-paste', '<Shift><Super>v'),
     ('guide', 'Shortcut Guide', '--shortcut-guide', '<Shift><Super>slash'),
     ('awake', 'Awake (toggle keep awake)', '--toggle-awake', '<Shift><Super>a'),
@@ -75,7 +77,7 @@ def set_fm_accel(accel, script=PEEK_SCRIPT):
 
 
 def action_command(flag):
-    return '%s %s' % (core.ENTRY, flag)
+    return '%s %s' % (shlex.quote(core.ENTRY), flag)  # a path with spaces stays one word
 
 
 def xkb_backend():

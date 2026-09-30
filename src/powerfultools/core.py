@@ -14,7 +14,7 @@ from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk  # noqa: E402
 
 APP_ID = 'io.github.maggimagesh.PowerfulTools'
 APP_NAME = 'Powerful Tools'
-VERSION = '1.1.1'
+VERSION = '1.2.0'
 CONFIG_DIR = os.path.join(GLib.get_user_config_dir(), 'powerful-tools')
 ENTRY = shutil.which('powerful-tools') or 'powerful-tools'  # replaced by app.main()
 
@@ -53,7 +53,13 @@ class Settings(object):
             pass
 
     def get(self, key, default=None):
-        return self.data.get(key, default)
+        v = self.data.get(key, default)
+        # the file can be edited or damaged: a value of the wrong kind falls back to the default
+        number = (int, float)
+        ok = default is None or type(v) is type(default) or (type(v) in number and type(default) in number)
+        if type(v) is float and (v != v or abs(v) == float('inf')):
+            ok = False
+        return v if ok else default
 
     def set(self, key, value):
         self.data[key] = value
@@ -94,6 +100,15 @@ def run(args, input_text=None, timeout=30):
         return 124, '', '%s: timed out' % args[0]
     except OSError as e:
         return 126, '', str(e)
+
+
+TRUSTED_PATH = '/usr/sbin:/usr/bin:/sbin:/bin'
+
+
+def system_bin(name):
+    """Full path of a system program, or None. pkexec finds programs through the caller's PATH, so anything run
+    as administrator is named by its full path: a program planted in ~/bin must never be picked up."""
+    return shutil.which(name, path=TRUSTED_PATH)
 
 
 def spawn(args):
@@ -274,13 +289,12 @@ def _capture_portal(callback, fallback):
         try:
             pb = GdkPixbuf.Pixbuf.new_from_file(path)
         except (GLib.Error, TypeError):
-            finish(None, 'Could not read screenshot')
-            return
+            pb = None
         try:
             os.unlink(path)  # portal saves into ~/Pictures; do not leave it there
-        except OSError:
+        except (OSError, TypeError):
             pass
-        finish(pb, None)
+        finish(pb, None if pb else 'Could not read screenshot')
 
     def on_called(conn, res):
         try:
@@ -303,22 +317,21 @@ def _capture_portal(callback, fallback):
 
 
 def _capture_cli(callback):
-    fd, tmp = tempfile.mkstemp(suffix='.png', prefix='pt-shot-')
-    os.close(fd)
-    os.unlink(tmp)
-    for cmd in (['gnome-screenshot', '-f', tmp], ['grim', tmp], ['spectacle', '-b', '-n', '-f', '-o', tmp],
-                ['scrot', tmp], ['import', '-window', 'root', tmp]):
-        if shutil.which(cmd[0]) and run(cmd, timeout=20)[0] == 0 and os.path.exists(tmp):
-            try:
-                pb = GdkPixbuf.Pixbuf.new_from_file(tmp)
-                callback(pb, None)
-                return
-            except GLib.Error:
-                pass
-            finally:
-                if os.path.exists(tmp):
+    d = tempfile.mkdtemp(prefix='pt-shot-')  # private: nobody else can read the screenshot or plant a link
+    tmp = os.path.join(d, 'shot.png')
+    pb = None
+    try:
+        for cmd in (['gnome-screenshot', '-f', tmp], ['grim', tmp], ['spectacle', '-b', '-n', '-f', '-o', tmp],
+                    ['scrot', tmp], ['import', '-window', 'root', tmp]):
+            if shutil.which(cmd[0]) and run(cmd, timeout=20)[0] == 0 and os.path.exists(tmp):
+                try:
+                    pb = GdkPixbuf.Pixbuf.new_from_file(tmp)
+                    break
+                except GLib.Error:
                     os.unlink(tmp)
-    callback(None, 'Could not capture the screen. Install gnome-screenshot, grim or scrot.')
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    callback(pb, None if pb else 'Could not capture the screen. Install gnome-screenshot, grim or scrot.')
 
 
 class ScreenOverlay(Gtk.Window):
@@ -455,6 +468,17 @@ class ScreenOverlay(Gtk.Window):
 
     def on_key(self, ev):
         return False
+
+
+MAX_PIXELS = 256 * 1000 * 1000  # about 1 GB once decoded
+
+
+def load_pixbuf(path):
+    """Load an image file. A tiny file can claim a huge size and use up all memory, so those are refused."""
+    info = GdkPixbuf.Pixbuf.get_file_info(path)
+    if info and info[0] and info[1] * info[2] > MAX_PIXELS:
+        raise ValueError('Image is too large (%d × %d)' % (info[1], info[2]))
+    return GdkPixbuf.Pixbuf.new_from_file(path)
 
 
 def draw_label(cr, text, x, y, w_max, h_max, pad=6):
@@ -611,7 +635,8 @@ def combo(options, active=None, on_change=None):
     c = Gtk.ComboBoxText()
     for oid, text in options:
         c.append(oid, text)
-    c.set_active_id(active if active is not None else options[0][0])
+    if not c.set_active_id(active if active is not None else options[0][0]):
+        c.set_active(0)  # a saved choice that no longer exists
     if on_change:
         c.connect('changed', lambda w: on_change(w.get_active_id()))
     return c

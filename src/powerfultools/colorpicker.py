@@ -76,6 +76,8 @@ class ColorPickerPage(core.Page):
         core.Page.__init__(self, app)
         s = app.settings
         self.rgb = tuple(s.get('color_current', [0, 120, 215]))
+        if len(self.rgb) != 3 or not all(type(v) is int and 0 <= v <= 255 for v in self.rgb):
+            self.rgb = (0, 120, 215)  # a damaged settings file
         self.add_widget(core.button_row(
             core.button('Pick color from screen', self.pick, 'color-select-symbolic', suggested=True),
             core.button('Choose with color wheel', self.choose_dialog, 'preferences-color-symbolic')))
@@ -122,7 +124,7 @@ class ColorPickerPage(core.Page):
         for hx in self.app.settings.get('color_history', []):
             try:
                 rgb = logic.hex_to_rgb(hx)
-            except ValueError:
+            except (ValueError, AttributeError):
                 continue
             b = Gtk.Button()
             b.set_tooltip_text(hx)

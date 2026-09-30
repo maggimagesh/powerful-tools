@@ -162,6 +162,8 @@ def apply_renames(pairs):
     try:
         for i, (old, new) in enumerate(pairs):
             tmp = os.path.join(os.path.dirname(old), '.pt-rename-%d-%d.tmp' % (os.getpid(), i))
+            if os.path.lexists(tmp):  # os.rename would silently replace it
+                raise FileExistsError('%s already exists' % tmp)
             os.rename(old, tmp)
             temps.append((old, tmp, new))
         for old, tmp, new in temps:
@@ -205,12 +207,16 @@ def track_paths(paths, steps):
 
 # ---------------------------------------------------------------- hosts file
 
-_HOST = re.compile(r'^(?=.{1,253}$)[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,62})(?:\.[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,62}))*\.?$')
+_HOST = re.compile(r'^(?=.{1,253}\Z)[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,62})(?:\.[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,62}))*\.?\Z')
 
 
 def valid_ip(s):
+    addr, sep, zone = s.partition('%')
+    # a zone (fe80::1%eth0) is IPv6 only; anything but plain characters in it could start a new line in the file
+    if sep and (':' not in addr or not re.match(r'^[A-Za-z0-9_.-]+\Z', zone)):
+        return False
     try:
-        ipaddress.ip_address(s.split('%', 1)[0])
+        ipaddress.ip_address(addr)
         return True
     except ValueError:
         return False
@@ -240,7 +246,12 @@ def _parse_entry(body):
 def parse_hosts(text):
     """Returns a list of items; entries are dicts, anything else is kept as a raw string."""
     items = []
-    for line in text.splitlines():
+    # only \n ends a line in this file: splitlines() would also break at form feeds and the like, and saving
+    # would then turn the rest of a comment into a live entry
+    lines = text.split('\n')
+    if not lines[-1]:
+        lines.pop()
+    for line in lines:
         s = line.strip()
         enabled = True
         if s.startswith('#'):
@@ -260,7 +271,7 @@ def parse_hosts(text):
 def format_entry(d):
     line = ('' if d['enabled'] else '# ') + d['ip'].strip() + '\t' + ' '.join(d['hosts'].split())
     if d.get('comment', '').strip():
-        line += '\t# ' + d['comment'].strip()
+        line += '\t# ' + ' '.join(d['comment'].split())  # always a single line
     return line
 
 
@@ -283,7 +294,7 @@ LEGACY_ENV = ('# >>> PowerToys for Linux: environment variables >>>',
               '# <<< PowerToys for Linux: environment variables <<<')
 _BEGINS = (ENV_BEGIN, LEGACY_ENV[0])
 _ENDS = (ENV_END, LEGACY_ENV[1])
-_ENV_NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+_ENV_NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*\Z')
 
 
 def valid_env_name(n):
@@ -295,8 +306,8 @@ def valid_env_value(v):
 
 
 def env_quote(v):
-    # double quotes keep $VAR expansion (e.g. PATH="$PATH:/opt/bin")
-    return '"' + v.replace('\\', '\\\\').replace('"', '\\"').replace('`', '\\`') + '"'
+    # double quotes keep $VAR expansion (e.g. PATH="$PATH:/opt/bin"); $(command) and `command` stay plain text
+    return '"' + v.replace('\\', '\\\\').replace('"', '\\"').replace('`', '\\`').replace('$(', '\\$(') + '"'
 
 
 def env_unquote(s):
@@ -399,7 +410,8 @@ def _eval(node):
 
 def calculate(expr):
     """Safely evaluate a math expression; returns a display string. Raises ValueError."""
-    e = expr.strip().lstrip('=').replace('^', '**').replace('×', '*').replace('÷', '/').replace(',', '')
+    e = expr.strip().lstrip('=').replace('^', '**').replace('×', '*').replace('÷', '/')
+    e = re.sub(r'(?<=\d),(?=\d{3}(?!\d))', '', e)  # 1,000 is a number; the comma in log(8, 2) separates arguments
     if not e or len(e) > 300:
         raise ValueError('empty')
     try:
@@ -411,11 +423,10 @@ def calculate(expr):
         raise ValueError('no real result')
     if isinstance(v, float) and v.is_integer() and abs(v) < 1e15:
         v = int(v)
-    if isinstance(v, int):
-        if abs(v) >= 10 ** 30:
-            return '%.12g' % v
-        return str(v)
-    return '%.12g' % v
+    try:
+        return str(v) if isinstance(v, int) and abs(v) < 10 ** 30 else '%.12g' % v
+    except OverflowError:
+        raise ValueError('number too large')
 
 # ---------------------------------------------------------------- screen ruler
 
@@ -490,7 +501,10 @@ def _md_table(text):
     if not rows_src:
         raise ValueError('Clipboard is empty')
     delim = '\t' if '\t' in rows_src[0] else ','
-    rows = list(csv.reader(io.StringIO('\n'.join(rows_src)), delimiter=delim))
+    try:
+        rows = list(csv.reader(io.StringIO('\n'.join(rows_src)), delimiter=delim))
+    except csv.Error as e:
+        raise ValueError('Not a table: %s' % e)
     width = max(len(r) for r in rows)
     rows = [[c.strip().replace('|', '\\|') for c in r] + [''] * (width - len(r)) for r in rows]
     out = ['| ' + ' | '.join(rows[0]) + ' |', '|' + '---|' * width]
@@ -566,7 +580,12 @@ def _user(uid):
 def find_lockers(paths, proc='/proc'):
     """Processes using any of `paths` (files or folders, recursive).
     Returns (list of dicts, number of processes we could not inspect)."""
-    targets = [os.path.realpath(p) for p in paths]
+    targets = []
+    for p in paths:
+        try:
+            targets.append(os.path.realpath(p))
+        except (OSError, ValueError):  # e.g. a link this user may not read
+            targets.append(os.path.abspath(p))
     me = os.getpid()
 
     def match(p):
@@ -631,3 +650,74 @@ def find_lockers(paths, proc='/proc'):
         results.append({'pid': pid, 'name': name, 'cmdline': cmd or name,
                         'user': _user(uid), 'uid': uid, 'files': sorted(files)})
     return results, denied
+
+# ---------------------------------------------------------------- fancy zones
+
+def zone_rects(n, x, y, w, h):
+    """Zones (x, y, w, h) that split a work area between n windows (2 to 4). The first is the main window's:
+    the left half, or the top-left quarter when there are four."""
+    lw, th = w // 2, h // 2
+    if n == 2:
+        return [(x, y, lw, h), (x + lw, y, w - lw, h)]
+    if n == 3:
+        return [(x, y, lw, h), (x + lw, y, w - lw, th), (x + lw, y + th, w - lw, h - th)]
+    return [(x, y, lw, th), (x + lw, y, w - lw, th), (x, y + th, lw, h - th), (x + lw, y + th, w - lw, h - th)]
+
+
+def maximize_button_rect(layout, x, y, w, pitch=40, edge=6, bar=44):
+    """Where a window's maximize button is expected: (x, y, w, h), or None if the desktop shows none.
+    layout is the desktop's button layout, e.g. 'appmenu:minimize,maximize,close'; x, y, w the visible frame.
+    Apps draw their own title bars, so this is an estimate: pitch, edge and bar are the button spacing, the gap
+    to the window edge and the title bar height of the default GTK theme."""
+    left, _sep, right = layout.partition(':')
+    left, right = [[b for b in side.split(',') if b in ('minimize', 'maximize', 'close')] for side in (left, right)]
+    if 'maximize' in right:
+        bx = x + w - edge - (len(right) - right.index('maximize')) * pitch
+    elif 'maximize' in left:
+        bx = x + edge + left.index('maximize') * pitch
+    else:
+        return None
+    return bx, y, pitch, bar
+
+
+def window_geometry(rect, frame=(0, 0, 0, 0), shadow=(0, 0, 0, 0)):
+    """The x, y, w, h to request from the window manager so that a window visibly fills rect.
+    frame is _NET_FRAME_EXTENTS (a title bar the window manager draws: not part of the requested size) and
+    shadow is _GTK_FRAME_EXTENTS (an invisible border the app draws: part of it). Both are left, right, top, bottom."""
+    x, y, w, h = rect
+    return (x - shadow[0], y - shadow[2], max(1, w - frame[0] - frame[1] + shadow[0] + shadow[1]),
+            max(1, h - frame[2] - frame[3] + shadow[2] + shadow[3]))
+
+
+def button_slots(data, rowstride, nch, w, h, count, from_right=True, tolerance=40, max_pitch=60):
+    """Find `count` evenly spaced title-bar buttons in a strip of pixels cut from a window's top corner.
+    Returns (the (start, end) columns of their slots from left to right, the row their glyphs are centred on),
+    or None if no such row of buttons is seen.
+    Apps space their buttons anywhere from 26 to 46 pixels apart, so the drawn glyphs are the only reliable guide."""
+    px = [[pixel_at(data, rowstride, nch, x, y) for y in range(h)] for x in range(w)]
+    counts = {}
+    for col in px:
+        for p in col:
+            counts[p] = counts.get(p, 0) + 1
+    bg = max(counts, key=counts.get)  # the title bar itself
+    drawn = [[max(abs(p[i] - bg[i]) for i in range(3)) > tolerance for p in col] for col in px]
+    ink = [any(col) for col in drawn]
+    runs = []  # [start, end) of neighbouring columns with something drawn in them
+    for x in range(w):
+        if ink[x]:
+            if runs and x - runs[-1][1] <= 3:
+                runs[-1][1] = x + 1
+            else:
+                runs.append([x, x + 1])
+    runs = [r for r in runs if r[1] - r[0] >= 5]  # not a window border or a stray pixel
+    runs = runs[-count:] if from_right else runs[:count]
+    if len(runs) < count:
+        return None
+    mid = [(a + b) / 2.0 for a, b in runs]
+    gaps = [q - p for p, q in zip(mid, mid[1:])]
+    pitch = sum(gaps) / len(gaps) if gaps else 32
+    edge = w - mid[-1] if from_right else mid[0]
+    if pitch > max_pitch or edge > max_pitch or any(abs(g - pitch) > 4 for g in gaps):
+        return None
+    rows = [y for a, b in runs for x in range(a, b) for y in range(h) if drawn[x][y]]
+    return [(int(m - pitch / 2), int(m + pitch / 2)) for m in mid], (min(rows) + max(rows)) // 2

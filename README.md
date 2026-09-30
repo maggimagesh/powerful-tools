@@ -44,12 +44,15 @@ similar Linux systems.
 | **Peek** | Instantly preview images, text files and folder contents without opening another app. |
 | **Screen Ruler** | Measure anything on the screen in pixels. Edges are detected automatically. |
 | **Always On Top** | Keeps a chosen window floating above all others, even while you work in other apps. |
+| **Fancy Zones** | Rest the pointer on a window's maximize button and choose a layout for 2, 3 or 4 windows. The window snaps into place and you pick which windows fill the other zones. |
 | **Advanced Paste** | Converts copied text: plain text, formatted JSON, Markdown tables, upper or lower case, Base64 and more. |
-| **Keyboard Manager** | Assign keyboard shortcuts to every tool, remap keys (for example, Caps Lock as Esc) and create your own shortcuts. |
 | **Shortcut Guide** | A searchable list of all keyboard shortcuts on your desktop. |
 | **Hosts File Editor** | Manage `/etc/hosts` entries (which website names point to which addresses) in an easy table. |
 | **Environment Variables** | View and edit your personal environment variables without using a terminal. |
 | **File Templates** | Create new files from your own templates. They also appear in the file manager's right-click menu. |
+
+The built-in **Keyboard Manager** assigns keyboard shortcuts to every tool, remaps keys (for example,
+Caps Lock as Esc) and lets you create your own shortcuts.
 
 The window adjusts to any screen, from a small laptop to a 4K monitor. There's a light or dark theme,
 and optional right-click menu entries for the Files, Nemo and Caja file managers.
@@ -144,7 +147,7 @@ For readers who want a look under the hood:
 
 - **Supporting components**, installed automatically by `apt` from the official Ubuntu repositories:
   **Tesseract** (text recognition for Text Extractor), **wmctrl** and **xprop** (window control for
-  Always On Top), and **pkexec** (the standard password prompt for protected actions).
+  Always On Top and Fancy Zones), and **pkexec** (the standard password prompt for protected actions).
 - **Screen tools** (Color Picker, Text Extractor, Screen Ruler) take a single screenshot, show it
   full-screen and let you point at it. On newer Ubuntu versions (Wayland), your desktop may ask once
   for permission to take screenshots.
@@ -160,6 +163,7 @@ powerful-tools --pick-color       pick a color from the screen
 powerful-tools --text-extract     copy text from the screen
 powerful-tools --ruler            measure on screen
 powerful-tools --always-on-top    pin or unpin the focused window
+powerful-tools --zones            arrange the focused window and others in zones
 powerful-tools --toggle-awake     keep the computer awake, or stop
 powerful-tools --page NAME        open a tool, e.g. hosts, envvars, peek
 powerful-tools --rename FILES     bulk-rename files (also --resize, --unlocker, --peek)
@@ -172,7 +176,7 @@ powerful-tools --help             list all options
 |---|---|
 | Text Extractor says the text recognition engine is missing | `sudo apt install tesseract-ocr tesseract-ocr-eng` |
 | Text in another language isn't recognized | Install its language pack, e.g. `sudo apt install tesseract-ocr-deu` for German |
-| Always On Top shows instructions instead of a window list | Your session uses Wayland, which doesn't let apps control other windows. Use the built-in option shown on the page, or choose **"Ubuntu on Xorg"** at the login screen. |
+| Always On Top or Fancy Zones shows instructions instead of its controls | Your session uses Wayland, which doesn't let apps control other windows. Use the built-in option shown on the page, or choose **"Ubuntu on Xorg"** at the login screen. |
 | A keyboard shortcut doesn't respond | Another app may use the same keys. Pick a different shortcut in Keyboard Manager. |
 | New environment variables don't show up | They apply after you log out and log back in. |
 | apt shows *"Download is performed unsandboxed as root"* | Harmless. It appears when the file is in a private folder such as Downloads. |

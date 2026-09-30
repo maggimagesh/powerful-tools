@@ -1,10 +1,11 @@
 import argparse
 import os
+import shlex
 import sys
 
 from . import core
 from .core import Gdk, Gio, GLib, Gtk
-from . import (advancedpaste, alwaysontop, awake, colorpicker, envvars, fileunlocker, hosts, imageresizer,
+from . import (advancedpaste, alwaysontop, awake, colorpicker, envvars, fancyzones, fileunlocker, hosts, imageresizer,
                keyboard, launcher, peek, bulkrename, screenruler, templates, shortcutguide, textextractor)
 
 FM_SCRIPTS = [('Powerful Tools Image Resizer', '--resize'), ('Powerful Tools Bulk Rename', '--rename'),
@@ -28,7 +29,7 @@ def install_fm_scripts():
             continue
         os.makedirs(d, exist_ok=True)
         with open(path, 'w') as f:
-            f.write('#!/bin/sh\nexec "%s" %s "$@"\n' % (core.ENTRY, flag))
+            f.write('#!/bin/sh\nexec %s %s "$@"\n' % (shlex.quote(core.ENTRY), flag))
         os.chmod(path, 0o755)
         n += 1
     return n
@@ -60,7 +61,7 @@ def migrate_legacy():
             if parts and os.path.basename(parts[0]) == LEGACY_COMMAND:
                 flag = parts[1] if len(parts) > 1 else ''
                 name = 'Powerful Tools: ' + titles.get(flag, flag or 'Open')
-                core.set_custom_keybinding(name, ' '.join([core.ENTRY] + parts[1:]), k['binding'], k['path'])
+                core.set_custom_keybinding(name, ' '.join([shlex.quote(core.ENTRY)] + parts[1:]), k['binding'], k['path'])
         if keyboard.fm_accels_supported():  # a global Peek shortcut can't see the selected files: move it to Files
             for k in core.list_custom_keybindings():
                 if k['command'].endswith(' --page peek') and 'powerful-tools' in k['command']:
@@ -128,8 +129,8 @@ class GeneralPage(core.Page):
 
 PAGES = [awake.AwakePage, colorpicker.ColorPickerPage, textextractor.TextExtractorPage, launcher.LauncherPage,
          bulkrename.BulkRenamePage, imageresizer.ImageResizerPage, fileunlocker.FileUnlockerPage,
-         peek.PeekPage, screenruler.ScreenRulerPage, alwaysontop.AlwaysOnTopPage, advancedpaste.AdvancedPastePage,
-         keyboard.KeyboardPage, shortcutguide.ShortcutGuidePage, hosts.HostsPage, envvars.EnvVarsPage,
+         peek.PeekPage, screenruler.ScreenRulerPage, alwaysontop.AlwaysOnTopPage, fancyzones.FancyZonesPage,
+         advancedpaste.AdvancedPastePage, keyboard.KeyboardPage, shortcutguide.ShortcutGuidePage, hosts.HostsPage, envvars.EnvVarsPage,
          templates.TemplatesPage, GeneralPage]
 
 
@@ -326,6 +327,8 @@ def build_parser():
     g.add_argument('--text-extract', action='store_true', help='capture text from the screen (OCR)')
     g.add_argument('--ruler', action='store_true', help='open the Screen Ruler')
     g.add_argument('--always-on-top', action='store_true', help='toggle always-on-top for the focused window')
+    g.add_argument('--zones', action='store_true', help='arrange the focused window and others in zones')
+    g.add_argument('--background', action='store_true', help='start without opening the window (used at login)')
     g.add_argument('--toggle-awake', action='store_true', help='keep the computer awake, or stop doing so')
     g.add_argument('--advanced-paste', action='store_true', help='open Advanced Paste')
     g.add_argument('--shortcut-guide', action='store_true', help='open the Shortcut Guide')
@@ -347,6 +350,7 @@ class Application(Gtk.Application):
         self.window = None
         self.awake = awake.AwakeController(self)
         self.pins = alwaysontop.PinKeeper(self)
+        self.zones = fancyzones.Zones(self)
         self.connect('shutdown', lambda *_: self.awake.stop(notify=False))
 
     def do_startup(self):
@@ -357,6 +361,7 @@ class Application(Gtk.Application):
                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.apply_theme()
         Gtk.IconTheme.get_default().append_search_path(os.path.join(os.path.dirname(__file__), 'icons'))
+        self.zones.apply()
 
     def apply_theme(self):
         s = Gtk.Settings.get_default()
@@ -408,6 +413,13 @@ class Application(Gtk.Application):
                 self.pins.toggle()
             else:
                 self.open_page('alwaysontop')
+        elif ns.zones:
+            if fancyzones.supported():
+                self.zones.show_for_active()
+            else:
+                self.open_page('fancyzones')
+        elif ns.background:
+            pass  # started at login: the app stays only while a background tool holds it
         elif ns.toggle_awake:
             on = self.awake.toggle()
             n = Gio.Notification.new('Awake is on' if on else 'Awake is off')

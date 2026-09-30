@@ -1,7 +1,7 @@
 import datetime
 import os
 
-from gi.repository import Gdk, GdkPixbuf, Gio, GLib, Gtk
+from gi.repository import Gdk, Gio, GLib, Gtk
 
 from . import core
 
@@ -82,14 +82,15 @@ def preview_widget(path):
         if not names:
             lb.add(core.label('Empty folder', 'pt-dim', xalign=0.5))
         return core.scrolled(lb)
-    if ctype.startswith('image/'):
+    regular = info.get_file_type() == Gio.FileType.REGULAR  # reading a pipe or a device would wait forever
+    if regular and ctype.startswith('image/'):
         try:
-            pb = GdkPixbuf.Pixbuf.new_from_file(path)
+            pb = core.load_pixbuf(path)
             pb = pb.apply_embedded_orientation() or pb
             return ImageView(pb)
-        except GLib.Error:
+        except (GLib.Error, ValueError):
             pass
-    if is_text_file(path, ctype):
+    if regular and is_text_file(path, ctype):
         try:
             with open(path, 'rb') as f:
                 data = f.read(TEXT_LIMIT + 1)
@@ -109,7 +110,8 @@ def preview_widget(path):
     img = Gtk.Image.new_from_gicon(info.get_icon(), Gtk.IconSize.DIALOG)
     img.set_pixel_size(96)
     box.pack_start(img, False, False, 0)
-    mtime = datetime.datetime.fromtimestamp(os.path.getmtime(path)).strftime('%Y-%m-%d %H:%M')
+    # from the details already read: asking again fails for a broken link
+    mtime = datetime.datetime.fromtimestamp(info.get_attribute_uint64('time::modified')).strftime('%Y-%m-%d %H:%M')
     for t in (info.get_display_name(), Gio.content_type_get_description(ctype),
               human_size(info.get_size()), 'Modified ' + mtime):
         box.pack_start(core.label(t, xalign=0.5), False, False, 0)
@@ -131,8 +133,9 @@ class PeekWindow(Gtk.Window):
         self.set_titlebar(hb)
         self.prev = core.button('', lambda: self.go(-1), 'go-previous-symbolic', tooltip='Previous (Left)')
         self.next = core.button('', lambda: self.go(1), 'go-next-symbolic', tooltip='Next (Right)')
-        hb.pack_start(self.prev)
-        hb.pack_start(self.next)
+        for b in (self.prev, self.next):  # shown by show_file, and only when there is more than one file
+            b.set_no_show_all(True)
+            hb.pack_start(b)
         hb.pack_end(core.button('', lambda: core.open_path(self.paths[self.i]), 'document-open-symbolic',
                                 tooltip='Open with default app'))
         hb.pack_end(core.button('', lambda: core.open_path(os.path.dirname(self.paths[self.i])),

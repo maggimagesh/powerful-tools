@@ -1,5 +1,4 @@
 import os
-import shutil
 
 from gi.repository import Gtk
 
@@ -51,18 +50,19 @@ class HostsPage(core.Page):
         return not q or any(q in (model[it][i] or '').lower() for i in (1, 2, 3))
 
     def load(self):
+        error = None
         try:
             with open(HOSTS) as f:
                 self.original = f.read()
         except OSError as e:
             self.original = ''
-            self.status.set_text('Could not read %s: %s' % (HOSTS, e))
+            error = 'Could not read %s: %s' % (HOSTS, e)
         self.items = logic.parse_hosts(self.original)
         self.store.clear()
         for it in self.items:
             if isinstance(it, dict):
                 self.store.append([it['enabled'], it['ip'], it['hosts'], it['comment'], it])
-        self.status.set_text('%d entries in %s' % (len(self.store), HOSTS))
+        self.status.set_text(error or '%d entries in %s' % (len(self.store), HOSTS))
 
     def _row(self, path):
         return self.store[self.fstore.convert_path_to_child_path(Gtk.TreePath(path))]
@@ -126,10 +126,14 @@ class HostsPage(core.Page):
                 self.toast('Could not save: %s' % e, error=True)
                 return
         else:
-            if not shutil.which('pkexec'):
+            if HOSTS != '/etc/hosts':  # PT_HOSTS_FILE is for tests: never write another file as administrator
+                self.toast('Cannot write %s' % HOSTS, error=True)
+                return
+            pkexec, tee = core.system_bin('pkexec'), core.system_bin('tee')
+            if not pkexec or not tee:
                 self.toast('pkexec is required to save /etc/hosts', error=True)
                 return
-            rc, _o, err = core.run(['pkexec', 'tee', HOSTS], input_text=text, timeout=300)
+            rc, _o, err = core.run([pkexec, tee, HOSTS], input_text=text, timeout=300)
             if rc != 0:
                 self.toast('Not saved: %s' % ('authentication cancelled' if rc in (126, 127) else err.strip()),
                            error=True)

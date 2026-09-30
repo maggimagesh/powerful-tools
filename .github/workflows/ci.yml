@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# every job reads the repository only; the publish job asks for more itself
+permissions:
+  contents: read
+
 jobs:
   lint-and-unit:
     runs-on: ubuntu-latest

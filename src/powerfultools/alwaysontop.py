@@ -40,7 +40,10 @@ def list_windows():
         if len(parts) < 3:
             continue
         # workspace -1 is also used for ordinary windows (other monitors), so filter by window type instead
-        wid, title = norm(parts[0]), parts[3] if len(parts) == 4 else ''
+        try:
+            wid, title = norm(parts[0]), parts[3] if len(parts) == 4 else ''
+        except ValueError:  # the rest of a window title that contains a line break
+            continue
         alive, props = _props(wid)
         if not alive or any(t in props for t in SKIP_TYPES):
             continue
