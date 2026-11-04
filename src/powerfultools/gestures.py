@@ -120,8 +120,8 @@ class Touchpad(object):
     def __init__(self, path, on_frame, on_lost):
         self.fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
         try:
-            (self.x0, x1, self.xres), (self.y0, _y1, self.yres) = absinfo(self.fd, ABS_MT_POSITION_X), \
-                absinfo(self.fd, ABS_MT_POSITION_Y)
+            self.x0, x1, self.xres = absinfo(self.fd, ABS_MT_POSITION_X)
+            self.y0, self.yres = absinfo(self.fd, ABS_MT_POSITION_Y)[::2]
         except OSError:
             os.close(self.fd)
             raise
