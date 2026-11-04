@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+# the touchpad rule is gone: take the access it gave back
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    if command -v udevadm >/dev/null 2>&1; then
+        udevadm control --reload-rules >/dev/null 2>&1 || true
+        udevadm trigger --subsystem-match=input --action=change >/dev/null 2>&1 || true
+    fi
+fi
+exit 0

@@ -721,3 +721,131 @@ def button_slots(data, rowstride, nch, w, h, count, from_right=True, tolerance=4
         return None
     rows = [y for a, b in runs for x in range(a, b) for y in range(h) if drawn[x][y]]
     return [(int(m - pitch / 2), int(m + pitch / 2)) for m in mid], (min(rows) + max(rows)) // 2
+
+
+# ---------------------------------------------------------------- touchpad gestures
+
+SWIPE_MM = 12  # finger travel that makes a swipe
+FLICK_MM = 25  # two-finger sideways travel for back/forward: longer than a casual horizontal scroll
+FLICK_SECS = 0.6
+PINCH_IN, PINCH_OUT = 0.7, 1.4  # change in finger spread that makes a pinch
+ZOOM_STEP = 1.2  # two-finger pinch zooms one step per 20% change in spread
+ROTATE_DEG = 40
+DRAG_MM = 1.5  # three fingers moving this far start a drag
+EDGE_MM = 6  # a finger this close to the left or right edge starts an edge swipe
+
+
+def swipe_direction(dx, dy):
+    """Direction of a swipe in touchpad coordinates (y grows downwards). Diagonals only upwards."""
+    a = math.degrees(math.atan2(-dy, dx)) % 360  # 0 = right, 90 = up
+    if a < 30 or a >= 330:
+        return 'right'
+    if a < 65:
+        return 'up-right'
+    if a < 115:
+        return 'up'
+    if a < 150:
+        return 'up-left'
+    return 'left' if a < 210 else 'down'
+
+
+class GestureRecognizer(object):
+    """Turns touchpad frames into gesture names. After every report, feed it the fingers on the pad in mm.
+    One gesture per touch: once one fires, nothing more fires until all fingers are lifted, except the
+    continuous ones (zoom steps and three-finger drag)."""
+
+    def __init__(self, width_mm=100.0, drag3=False):
+        self.width = width_mm
+        self.drag3 = drag3
+        self.n = 0
+        self.start = None
+        self.mode = None
+        self.locked = False
+
+    def feed(self, t, pts, fingers=None):
+        """pts: [(x, y)] in mm, in a stable order (slot order). fingers: the count when the pad tracks fewer
+        positions than fingers it senses. Returns a list of names, plus ('drag', dx, dy) tuples in mm."""
+        n = max(len(pts), fingers or 0)
+        out = []
+        if n != self.n:
+            if self.mode == 'drag':
+                out.append('drag-end')
+            self.n, self.mode = n, None
+            if n == 0:
+                self.locked = False
+            self.start = None
+            if n >= 2 and pts and not self.locked:
+                c = self._centroid(pts)
+                self.start = (t, c, self._spread(pts, c), self._angle(pts), min(p[0] for p in pts),
+                              max(p[0] for p in pts))
+                self.last, self.zoom = c, 1.0
+                if n == 3 and self.drag3:
+                    self.mode = 'drag-wait'  # not yet: a fourth finger may still land
+            return out
+        if self.start is None or not pts:
+            return out
+        t0, c0, s0, a0, left0, right0 = self.start
+        c = self._centroid(pts)
+        dx, dy = c[0] - c0[0], c[1] - c0[1]
+        ratio = self._spread(pts, c) / s0 if s0 > 1 else 1.0
+        if self.mode == 'drag-wait' and math.hypot(dx, dy) > DRAG_MM:
+            self.mode, self.locked = 'drag', True
+            out.append('drag-begin')
+            self.last = c0
+        if self.mode == 'drag':
+            out.append(('drag', c[0] - self.last[0], c[1] - self.last[1]))
+            self.last = c
+            return out
+        if self.mode == 'zoom':
+            return self._zoom(ratio)
+        if self.mode is not None:
+            return out
+        fire = None
+        if n >= 3:
+            k = min(n, 4)
+            if ratio < PINCH_IN or ratio > PINCH_OUT:
+                fire = 'pinch%d-%s' % (k, 'in' if ratio < 1 else 'out')
+            elif math.hypot(dx, dy) > SWIPE_MM:
+                d = swipe_direction(dx, dy)
+                fire = 'swipe%d-%s' % (k, d if k == 3 else d.split('-')[0])
+        else:
+            turn = (self._angle(pts) - a0 + 180) % 360 - 180
+            if left0 < EDGE_MM and dx > SWIPE_MM and abs(dy) < dx:
+                fire = 'edge-left'
+            elif right0 > self.width - EDGE_MM and -dx > SWIPE_MM and abs(dy) < -dx:
+                fire = 'edge-right'
+            elif abs(turn) > ROTATE_DEG and 0.75 < ratio < 1.33:
+                fire = 'rotate2-cw' if turn > 0 else 'rotate2-ccw'  # y grows downwards: a positive turn is clockwise
+            elif ratio > ZOOM_STEP or ratio < 1 / ZOOM_STEP:
+                self.mode, self.locked = 'zoom', True
+                return self._zoom(ratio)
+            elif abs(dx) > FLICK_MM and abs(dy) < abs(dx) / 2 and t - t0 < FLICK_SECS:
+                fire = 'swipe2-left' if dx < 0 else 'swipe2-right'
+            elif math.hypot(dx, dy) > FLICK_MM:
+                self.mode = 'scroll'  # ordinary scrolling: never turns into a gesture later in this touch
+        if fire:
+            self.mode, self.locked = 'done', True
+            out.append(fire)
+        return out
+
+    def _zoom(self, ratio):
+        out = []
+        while ratio / self.zoom > ZOOM_STEP:
+            self.zoom *= ZOOM_STEP
+            out.append('pinch2-out')
+        while ratio / self.zoom < 1 / ZOOM_STEP:
+            self.zoom /= ZOOM_STEP
+            out.append('pinch2-in')
+        return out
+
+    @staticmethod
+    def _centroid(pts):
+        return sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)
+
+    @staticmethod
+    def _spread(pts, c):
+        return sum(math.hypot(p[0] - c[0], p[1] - c[1]) for p in pts) / len(pts)
+
+    @staticmethod
+    def _angle(pts):
+        return math.degrees(math.atan2(pts[1][1] - pts[0][1], pts[1][0] - pts[0][0])) if len(pts) > 1 else 0.0

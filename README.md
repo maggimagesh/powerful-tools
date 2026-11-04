@@ -5,7 +5,7 @@
 <h1 align="center">Powerful Tools</h1>
 
 <p align="center">
-  A free desktop app for Linux that puts 16 everyday productivity utilities in one place.
+  A free desktop app for Linux that puts 17 everyday productivity utilities in one place.
 </p>
 
 <p align="center">
@@ -45,6 +45,7 @@ similar Linux systems.
 | **Screen Ruler** | Measure anything on the screen in pixels. Edges are detected automatically. |
 | **Always On Top** | Keeps a chosen window floating above all others, even while you work in other apps. |
 | **Fancy Zones** | Rest the pointer on a window's maximize button and choose a layout for 2, 3 or 4 windows. The window snaps into place and you pick which windows fill the other zones. |
+| **Touchpad Gestures** | Mac-style gestures: three fingers up for all windows, down to minimize everything and show the desktop, sideways for workspaces, diagonally to snap a window to half the screen. Four fingers maximize, minimize, switch apps, pinch for all apps and spread for the current app's windows (App Exposé). Two fingers pinch to zoom, rotate in image viewers and swipe back/forward in browsers. Swipe in from an edge for notifications or Quick Launcher. Optional three-finger drag. Every gesture can be set to any action, key combination or command. Also has the touchpad settings: tap to click, natural scrolling, palm rejection, speed. |
 | **Advanced Paste** | Converts copied text: plain text, formatted JSON, Markdown tables, upper or lower case, Base64 and more. |
 | **Shortcut Guide** | A searchable list of all keyboard shortcuts on your desktop. |
 | **Hosts File Editor** | Manage `/etc/hosts` entries (which website names point to which addresses) in an easy table. |
@@ -177,6 +178,8 @@ powerful-tools --help             list all options
 | Text Extractor says the text recognition engine is missing | `sudo apt install tesseract-ocr tesseract-ocr-eng` |
 | Text in another language isn't recognized | Install its language pack, e.g. `sudo apt install tesseract-ocr-deu` for German |
 | Always On Top or Fancy Zones shows instructions instead of its controls | Your session uses Wayland, which doesn't let apps control other windows. Use the built-in option shown on the page, or choose **"Ubuntu on Xorg"** at the login screen. |
+| Touchpad Gestures says one-time setup is needed | Click **Allow touchpad access** on its page and enter your password. This lets your account read the touchpad only (never the keyboard). The `.deb` package does this for you when it is installed. |
+| Gestures don't respond on Wayland | Wayland desktops (GNOME, KDE) have their own three- and four-finger gestures. Powerful Tools gestures need an X11 session (**"Ubuntu on Xorg"**). |
 | A keyboard shortcut doesn't respond | Another app may use the same keys. Pick a different shortcut in Keyboard Manager. |
 | New environment variables don't show up | They apply after you log out and log back in. |
 | apt shows *"Download is performed unsandboxed as root"* | Harmless. It appears when the file is in a private folder such as Downloads. |

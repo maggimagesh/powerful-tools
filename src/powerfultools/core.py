@@ -117,6 +117,22 @@ def spawn(args):
                      stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
 
 
+def present_focused(win):
+    """Show a window with the keyboard focus, also when opened from the background (a gesture, a pointer
+    rest): on X11 the window manager only hands focus to a request newer than the current focus."""
+    win.show_all()
+    gw = win.get_window()
+    try:
+        gi.require_version('GdkX11', '3.0')
+        from gi.repository import GdkX11
+        if isinstance(gw, GdkX11.X11Window):
+            win.present_with_time(GdkX11.x11_get_server_time(gw))
+            return
+    except (ValueError, ImportError):
+        pass
+    win.present()
+
+
 def is_wayland():
     d = Gdk.Display.get_default()
     return d is not None and 'Wayland' in type(d).__name__

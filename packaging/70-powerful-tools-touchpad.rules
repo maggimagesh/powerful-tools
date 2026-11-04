@@ -1,0 +1,2 @@
+# Powerful Tools: the logged-in user may read the touchpad (touchpads only, never keyboards)
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_TOUCHPAD}=="1", TAG+="uaccess"

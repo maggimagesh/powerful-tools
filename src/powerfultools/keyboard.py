@@ -26,6 +26,7 @@ ACTIONS = [
     ('hosts', 'Hosts File Editor', '--page hosts', '<Shift><Super>h'),
     ('envvars', 'Environment Variables', '--page envvars', '<Shift><Super>e'),
     ('templates', 'File Templates', '--page templates', '<Shift><Super>n'),
+    ('gestures', 'Touchpad Gestures', '--page gestures', '<Shift><Super>g'),
 ]
 
 REMAPS = [

@@ -969,6 +969,68 @@ def t_fancyzones_edges(app, win):
     win.pages['fancyzones'].switch.set_active(True)
 
 
+def t_gestures(app, win):
+    G = A.gestures
+    p = win.show_page('gestures')
+    shot(win, 'gestures')
+    ctl = app.gestures
+    if not G.supported():
+        check('Touchpad Gestures explains what it needs', ctl.state == 'unsupported' and 'X11' in p.status.get_text())
+        return
+    check('Touchpad Gestures is on from the start and waits for a touchpad', ctl.enabled
+          and ctl.state in ('on', 'no-touchpad', 'no-access') and os.path.exists(G.AUTOSTART), ctl.state)
+
+    class Fake(object):
+        def __init__(self):
+            self.log = []
+
+        def accel(self, a):
+            self.log.append(a)
+            return True
+
+        def button(self, n, down):
+            self.log.append(('button', n, down))
+
+        def move(self, dx, dy):
+            self.log.append(('move', dx, dy))
+    real, fake = ctl.xtest, Fake()
+    ctl.xtest, ctl.rec = fake, logic.GestureRecognizer()
+    G.overview_active = lambda value=None: False if value is None else value
+    ctl.handle('swipe4-left')
+    ctl.handle('pinch2-out')
+    check('Touchpad Gestures sends the desktop\'s own shortcut, or the usual keys', fake.log[:2] ==
+          [G.bound_accel(*G.BOUND['switch-app']), '<Control>equal'], fake.log)
+    ctl.set_action('swipe3-up', 'keys:<Control><Alt>t')
+    ctl.handle('swipe3-up')
+    check('Touchpad Gestures runs a custom key combination', fake.log[-1] == '<Control><Alt>t'
+          and app.settings.get('gesture_map')['swipe3-up'] == 'keys:<Control><Alt>t')
+    G.active_class = lambda: 'wm_class(string) = "gedit"'
+    n = len(fake.log)
+    ctl.handle('swipe2-left')
+    G.active_class = lambda: 'wm_class(string) = "navigator", "firefox"'
+    ctl.handle('swipe2-left')
+    check('Touchpad Gestures goes back only in browsers and file managers', fake.log[n:] == ['<Alt>Left'], fake.log[n:])
+    fake.log = []
+    ctl.rec.drag3 = True
+    ctl.handle('swipe4-left')
+    ctl.handle('drag-begin')
+    ctl.handle(('drag', 0.1, 0.0))
+    ctl.handle(('drag', 0.2, 1.0))
+    ctl.handle('drag-end')
+    check('Touchpad Gestures with three-finger drag: four-finger swipes do the three-finger actions, the drag holds '
+          'the button', fake.log == [G.bound_accel(*G.BOUND['workspace-right']), ('button', 1, True), ('move', 1, 5),
+                                     ('button', 1, False)], fake.log)
+    ctl.xtest = real
+    c = p.combos['swipe4-up']
+    c.set_active_id('minimize')
+    check('Touchpad Gestures saves the chosen action', ctl.action_for('swipe4-up') == 'minimize')
+    p.switch.set_active(False)
+    check('Touchpad Gestures turns off', not ctl.enabled and not os.path.exists(G.AUTOSTART)
+          and 'Off' in p.status.get_text())
+    p.switch.set_active(True)
+    check('Touchpad Gestures turns on again', ctl.enabled and os.path.exists(G.AUTOSTART))
+
+
 def _labels(w):
     out = [w.get_text()] if isinstance(w, Gtk.Label) else []
     if isinstance(w, Gtk.Container):
@@ -983,7 +1045,8 @@ def t_bad_settings(app, win):
         'resize_shrink': 'yes', 'resize_overwrite': 2, 'resize_pattern': 9, 'resize_format': 'bmp',
         'resize_quality': float('nan'), 'awake_hours': 'x', 'awake_minutes': [], 'awake_until_h': {}, 'awake_until_m': -5,
         'awake_screen_on': 'on', 'color_history': [1, None, 'zzz', '#00ff00'], 'color_current': [300, 'a'],
-        'color_copy_format': 'XYZ', 'ocr_lang': '--help', 'run_engine': ['x'], 'ruler_tolerance': 'soft', 'zones_hover': 'no'}
+        'color_copy_format': 'XYZ', 'ocr_lang': '--help', 'run_engine': ['x'], 'ruler_tolerance': 'soft', 'zones_hover': 'no',
+        'gesture_map': ['x'], 'gesture_drag3': 'on', 'gesture_drag_speed': 'fast', 'gestures_on': 3}
     for page in list(win.pages.values()):
         win.stack.remove(page)
         page.destroy()
@@ -1040,7 +1103,7 @@ def t_migration(app, win):
 
 
 TESTS = [t_migration, t_icons, t_pages_and_sizes, t_bulkrename, t_imageresizer, t_hosts, t_envvars, t_advancedpaste,
-         t_colorpicker, t_textextractor, t_unlocker, t_keyboard, t_fancyzones, t_run, t_peek, t_templates, t_misc_pages, t_cli,
+         t_colorpicker, t_textextractor, t_unlocker, t_keyboard, t_fancyzones, t_gestures, t_run, t_peek, t_templates, t_misc_pages, t_cli,
          t_edges_files, t_edges_pages, t_fancyzones_edges, t_bad_settings]
 
 

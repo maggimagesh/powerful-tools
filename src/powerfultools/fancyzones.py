@@ -147,15 +147,15 @@ def arrange(app, wid, n):
     return ZonePicker(app, zones[1:], others) if others else None
 
 
-def set_autostart(on):
-    """Start the app without its window at login, so hovering works before it is opened."""
+def set_autostart(on, path=AUTOSTART, tool='Fancy Zones'):
+    """Start the app without its window at login, so a background tool works before it is opened."""
     if on:
         if re.search(r'[\x00-\x1f"`$\\%]', core.ENTRY):  # these would need escaping in a desktop entry
             raise OSError('unsupported character in the install path %r' % core.ENTRY)
-        core.write_file_atomic(AUTOSTART, '[Desktop Entry]\nType=Application\nName=Powerful Tools (Fancy Zones)\n'
-                               'TryExec=%s\nExec="%s" --background\nIcon=powerful-tools\n' % (core.ENTRY, core.ENTRY))
-    elif os.path.exists(AUTOSTART):
-        os.unlink(AUTOSTART)
+        core.write_file_atomic(path, '[Desktop Entry]\nType=Application\nName=Powerful Tools (%s)\n'
+                               'TryExec=%s\nExec="%s" --background\nIcon=powerful-tools\n' % (tool, core.ENTRY, core.ENTRY))
+    elif os.path.exists(path):
+        os.unlink(path)
 
 
 def layout_icon(n):

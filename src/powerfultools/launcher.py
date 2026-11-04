@@ -169,8 +169,7 @@ class LauncherWindow(Gtk.Window):
         return False
 
     def present_run(self):
-        self.show_all()
-        self.present()
+        core.present_focused(self)
         self.entry.grab_focus()
 
     def _changed(self, *_):

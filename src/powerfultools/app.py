@@ -5,7 +5,8 @@ import sys
 
 from . import core
 from .core import Gdk, Gio, GLib, Gtk
-from . import (advancedpaste, alwaysontop, awake, colorpicker, envvars, fancyzones, fileunlocker, hosts, imageresizer,
+from . import (advancedpaste, alwaysontop, awake, colorpicker, envvars, fancyzones, fileunlocker, gestures, hosts,
+               imageresizer,
                keyboard, launcher, peek, bulkrename, screenruler, templates, shortcutguide, textextractor)
 
 FM_SCRIPTS = [('Powerful Tools Image Resizer', '--resize'), ('Powerful Tools Bulk Rename', '--rename'),
@@ -130,6 +131,7 @@ class GeneralPage(core.Page):
 PAGES = [awake.AwakePage, colorpicker.ColorPickerPage, textextractor.TextExtractorPage, launcher.LauncherPage,
          bulkrename.BulkRenamePage, imageresizer.ImageResizerPage, fileunlocker.FileUnlockerPage,
          peek.PeekPage, screenruler.ScreenRulerPage, alwaysontop.AlwaysOnTopPage, fancyzones.FancyZonesPage,
+         gestures.GesturesPage,
          advancedpaste.AdvancedPastePage, keyboard.KeyboardPage, shortcutguide.ShortcutGuidePage, hosts.HostsPage, envvars.EnvVarsPage,
          templates.TemplatesPage, GeneralPage]
 
@@ -351,6 +353,7 @@ class Application(Gtk.Application):
         self.awake = awake.AwakeController(self)
         self.pins = alwaysontop.PinKeeper(self)
         self.zones = fancyzones.Zones(self)
+        self.gestures = gestures.Gestures(self)
         self.connect('shutdown', lambda *_: self.awake.stop(notify=False))
 
     def do_startup(self):
@@ -362,6 +365,7 @@ class Application(Gtk.Application):
         self.apply_theme()
         Gtk.IconTheme.get_default().append_search_path(os.path.join(os.path.dirname(__file__), 'icons'))
         self.zones.apply()
+        self.gestures.apply()
 
     def apply_theme(self):
         s = Gtk.Settings.get_default()

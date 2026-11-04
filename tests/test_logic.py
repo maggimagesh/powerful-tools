@@ -427,6 +427,64 @@ def test_security():
     shutil.rmtree(d)
 
 
+def test_gestures():
+    def touch(starts, moves, steps=10, dt=0.02, drag3=False, width=100.0, fingers=None):
+        """Put fingers down at starts, move each by moves[i] over steps frames, lift. Returns every event."""
+        r = L.GestureRecognizer(width, drag3)
+        out, t = [], 0.0
+        for k in range(1, len(starts) + 1):  # fingers land one after another
+            out += r.feed(t, [tuple(p) for p in starts[:k]], fingers)
+            t += dt
+        for i in range(1, steps + 1):
+            pts = [(x + mx * i / steps, y + my * i / steps) for (x, y), (mx, my) in zip(starts, moves)]
+            out += r.feed(t, pts, fingers)
+            t += dt
+        for k in range(len(starts) - 1, -1, -1):
+            out += r.feed(t, pts[:k])
+        return out
+    three = [(40, 40), (50, 40), (60, 40)]
+    four = three + [(70, 42)]
+    same = lambda d, n: [d] * n  # noqa: E731
+    assert touch(three, same((0, -20), 3)) == ['swipe3-up']
+    assert touch(three, same((0, 20), 3)) == ['swipe3-down']
+    assert touch(three, same((-20, 0), 3)) == ['swipe3-left']
+    assert touch(three, same((20, 2), 3)) == ['swipe3-right']
+    assert touch(three, same((-15, -15), 3)) == ['swipe3-up-left']
+    assert touch(three, same((15, -15), 3)) == ['swipe3-up-right']
+    assert touch(three, same((3, -3), 3)) == []  # too short
+    assert touch(four, same((0, -20), 4)) == ['swipe4-up'] and touch(four, same((15, -15), 4)) == ['swipe4-up']
+    assert touch(four, same((-20, 0), 4)) == ['swipe4-left']
+    assert touch(four, [(15, 15), (5, 15), (-5, 15), (-15, 13)]) == ['pinch4-in']
+    assert touch(four, [(-20, -10), (-7, -10), (7, -10), (20, -10)]) == ['pinch4-out']
+    # one gesture per touch, even when the fingers keep going
+    assert touch(three, same((0, -60), 3), steps=30) == ['swipe3-up']
+    # a pad that tracks two positions but senses three fingers
+    assert touch([(40, 40), (50, 40)], same((0, -20), 2), fingers=3)[-1:] == ['swipe3-up']
+    two = [(40, 40), (55, 40)]
+    assert touch(two, same((-30, 0), 2), steps=8) == ['swipe2-left']
+    assert touch(two, same((30, 0), 2), steps=8) == ['swipe2-right']
+    assert touch(two, same((-30, 0), 2), steps=40) == []  # a slow sideways scroll is only scrolling
+    assert touch(two, same((0, 40), 2)) == []  # scrolling
+    assert touch(two, [(-15, 0), (15, 0)]) == ['pinch2-out'] * 6  # spread x3 = 1.2 ** 6: one step per 20%
+    assert set(touch(two, [(6, 0), (-6, 0)])) == {'pinch2-in'}
+    # turn the two fingers about their midpoint by 60 degrees (y grows downwards: clockwise on the pad)
+    import math as m
+    turn = [(47.5 + 7.5 * m.cos(m.radians(a)) * s, 40 + 7.5 * m.sin(m.radians(a)) * s) for s in (-1, 1) for a in (60,)]
+    assert touch(two, [(turn[0][0] - 40, turn[0][1] - 40), (turn[1][0] - 55, turn[1][1] - 40)]) == ['rotate2-cw']
+    assert touch([(55, 40), (40, 40)], [(turn[1][0] - 55, 80 - turn[1][1] - 40),
+                                         (turn[0][0] - 40, 80 - turn[0][1] - 40)]) == ['rotate2-ccw']
+    assert touch([(2, 40), (14, 40)], same((20, 0), 2), steps=40) == ['edge-left']
+    assert touch([(85, 40), (98, 40)], same((-20, 0), 2), steps=40) == ['edge-right']
+    assert touch([(85, 40), (98, 40)], same((-20, 0), 2), steps=40, width=200) == []  # not at the edge of a wide pad
+    # three-finger drag: continuous motion between begin and end, and no swipe
+    ev = touch(three, same((10, 5), 3), drag3=True)
+    assert ev[0] == 'drag-begin' and ev[-1] == 'drag-end' and all(e[0] == 'drag' for e in ev[1:-1])
+    assert abs(sum(e[1] for e in ev[1:-1]) - 10) < 1e-6 and abs(sum(e[2] for e in ev[1:-1]) - 5) < 1e-6
+    assert touch(four, same((0, -20), 4), drag3=True) == ['swipe4-up']  # landing on the way to four fingers: no click
+    assert touch(three, same((0.5, 0), 3), drag3=True) == []  # resting fingers press nothing
+    assert L.GestureRecognizer().feed(0, []) == [] and L.GestureRecognizer().feed(0, [(1, 1)]) == []
+
+
 if __name__ == '__main__':
     t0 = time.time()
     tests = [(n, fn) for n, fn in sorted(globals().items()) if n.startswith('test_')]
