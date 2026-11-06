@@ -979,6 +979,12 @@ def t_gestures(app, win):
         return
     check('Touchpad Gestures is on from the start and waits for a touchpad', ctl.enabled
           and ctl.state in ('on', 'no-touchpad', 'no-access') and os.path.exists(G.AUTOSTART), ctl.state)
+    sw = p.combos['edge-left'].get_parent().get_children()[-1]  # the row's switch, right of the action list
+    sw.set_active(False)
+    off = not ctl.gesture_on('edge-left') and not p.combos['edge-left'].get_sensitive()
+    sw.set_active(True)
+    check('Each gesture has an on/off switch that greys out its action', isinstance(sw, A.Gtk.Switch) and off
+          and ctl.gesture_on('edge-left') and p.combos['edge-left'].get_sensitive())
 
     class Fake(object):
         def __init__(self):
@@ -997,9 +1003,28 @@ def t_gestures(app, win):
     ctl.xtest, ctl.rec = fake, logic.GestureRecognizer()
     G.overview_active = lambda value=None: False if value is None else value
     ctl.handle('swipe4-left')
-    ctl.handle('pinch2-out')
+    ctl.set_action('swipe3-down', 'zoom-in')
+    ctl.handle('swipe3-down')
+    ctl.set_action('swipe3-down', 'show-desktop')
     check('Touchpad Gestures sends the desktop\'s own shortcut, or the usual keys', fake.log[:2] ==
           [G.bound_accel(*G.BOUND['switch-app']), '<Control>equal'], fake.log)
+    shown, desk, real_desk = [True], [], G.show_desktop
+    G.overview_active = lambda value=None: shown[0] if value is None else shown.__setitem__(0, value)
+    G.show_desktop = lambda: desk.append(1)
+    ctl.handle('swipe3-down')
+    first = (shown[0], len(desk))
+    ctl.handle('swipe3-down')
+    check('Swiping three fingers down leaves the overview first, then shows the desktop',
+          first == (False, 0) and len(desk) == 1, (first, desk))
+    ctl.set_gesture_on('swipe3-down', False)
+    ctl.handle('swipe3-down')
+    off_ok = len(desk) == 1 and not ctl.gesture_on('swipe3-down')
+    ctl.set_gesture_on('swipe3-down', True)
+    ctl.handle('swipe3-down')
+    check('A gesture switched off does nothing; switched back on it works',
+          off_ok and len(desk) == 2 and app.settings.get('gesture_off') == [], desk)
+    G.show_desktop = real_desk
+    G.overview_active = lambda value=None: False if value is None else value
     ctl.set_action('swipe3-up', 'keys:<Control><Alt>t')
     ctl.handle('swipe3-up')
     check('Touchpad Gestures runs a custom key combination', fake.log[-1] == '<Control><Alt>t'

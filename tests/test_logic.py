@@ -454,8 +454,7 @@ def test_gestures():
     assert touch(three, same((3, -3), 3)) == []  # too short
     assert touch(four, same((0, -20), 4)) == ['swipe4-up'] and touch(four, same((15, -15), 4)) == ['swipe4-up']
     assert touch(four, same((-20, 0), 4)) == ['swipe4-left']
-    assert touch(four, [(15, 15), (5, 15), (-5, 15), (-15, 13)]) == ['pinch4-in']
-    assert touch(four, [(-20, -10), (-7, -10), (7, -10), (20, -10)]) == ['pinch4-out']
+    assert touch(four, [(5, 0), (2, 0), (-2, 0), (-5, 0)]) == []  # no pinch gestures
     # one gesture per touch, even when the fingers keep going
     assert touch(three, same((0, -60), 3), steps=30) == ['swipe3-up']
     # a pad that tracks two positions but senses three fingers
@@ -465,8 +464,9 @@ def test_gestures():
     assert touch(two, same((30, 0), 2), steps=8) == ['swipe2-right']
     assert touch(two, same((-30, 0), 2), steps=40) == []  # a slow sideways scroll is only scrolling
     assert touch(two, same((0, 40), 2)) == []  # scrolling
-    assert touch(two, [(-15, 0), (15, 0)]) == ['pinch2-out'] * 6  # spread x3 = 1.2 ** 6: one step per 20%
-    assert set(touch(two, [(6, 0), (-6, 0)])) == {'pinch2-in'}
+    assert touch([(40, 40), (48, 40)], [(-1, 30), (2, 30)]) == []  # fingers drifting apart while scrolling: no zoom
+    assert touch([(40, 40), (48, 40)], [(1, -30), (-2, -30)]) == []  # or together
+    assert touch(two, [(-15, 0), (15, 0)]) == [] and touch(two, [(6, 0), (-6, 0)]) == []  # no pinch gestures
     # turn the two fingers about their midpoint by 60 degrees (y grows downwards: clockwise on the pad)
     import math as m
     turn = [(47.5 + 7.5 * m.cos(m.radians(a)) * s, 40 + 7.5 * m.sin(m.radians(a)) * s) for s in (-1, 1) for a in (60,)]

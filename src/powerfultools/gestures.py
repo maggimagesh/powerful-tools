@@ -1,4 +1,4 @@
-"""Touchpad Gestures: macOS-style three- and four-finger swipes, pinches, edge swipes and three-finger drag.
+"""Touchpad Gestures: macOS-style three- and four-finger swipes, edge swipes and three-finger drag.
 
 Fingers are read straight from the touchpad (evdev), next to the desktop's own driver, which keeps moving the
 pointer and scrolling as usual. GNOME on X11 has no multi-finger gestures, so nothing is done twice.
@@ -23,6 +23,7 @@ RETRY_SECS = 5
 EV_SYN, EV_KEY, EV_ABS = 0, 1, 3
 SYN_REPORT = 0
 ABS_MT_SLOT, ABS_MT_POSITION_X, ABS_MT_POSITION_Y, ABS_MT_TRACKING_ID = 0x2f, 0x35, 0x36, 0x39
+BTN_LEFT = 0x110  # the pad's own click: a clickpad sends it for any press, wherever the finger is
 BTN_TOOLS = {0x145: 1, 0x14d: 2, 0x14e: 3, 0x14f: 4, 0x148: 5}  # BTN_TOOL_FINGER .. QUINTTAP
 EVENT = struct.Struct('llHHi')  # struct input_event on 64-bit Linux
 
@@ -63,17 +64,13 @@ GESTURES = [
     ('Three fingers', [
         ('swipe3-up', 'Swipe up', 'overview'), ('swipe3-down', 'Swipe down', 'show-desktop'),
         ('swipe3-left', 'Swipe left', 'workspace-right'), ('swipe3-right', 'Swipe right', 'workspace-left'),
-        ('swipe3-up-left', 'Swipe up and left', 'tile-left'), ('swipe3-up-right', 'Swipe up and right', 'tile-right'),
-        ('pinch3-in', 'Pinch in', 'none'), ('pinch3-out', 'Spread out', 'none')]),
+        ('swipe3-up-left', 'Swipe up and left', 'tile-left'), ('swipe3-up-right', 'Swipe up and right', 'tile-right')]),
     ('Four fingers', [
         ('swipe4-up', 'Swipe up', 'maximize'), ('swipe4-down', 'Swipe down', 'minimize'),
-        ('swipe4-left', 'Swipe left', 'switch-app'), ('swipe4-right', 'Swipe right', 'switch-app-back'),
-        ('pinch4-in', 'Pinch in', 'app-grid'), ('pinch4-out', 'Spread out', 'app-windows')]),
+        ('swipe4-left', 'Swipe left', 'switch-app'), ('swipe4-right', 'Swipe right', 'switch-app-back')]),
     ('Two fingers', [
         ('swipe2-left', 'Quick swipe left (browsers and file managers)', 'back'),
         ('swipe2-right', 'Quick swipe right (browsers and file managers)', 'forward'),
-        ('pinch2-out', 'Spread out (repeats while you spread)', 'zoom-in'),
-        ('pinch2-in', 'Pinch in (repeats while you pinch)', 'zoom-out'),
         ('rotate2-cw', 'Rotate clockwise (image viewers)', 'rotate-cw'),
         ('rotate2-ccw', 'Rotate anticlockwise (image viewers)', 'rotate-ccw')]),
     ('From the edge, with two fingers', [
@@ -81,7 +78,7 @@ GESTURES = [
         ('edge-left', 'Swipe in from the left edge', 'launcher')]),
 ]
 DEFAULTS = dict((g, a) for _t, rows in GESTURES for g, _l, a in rows)
-# two-finger swipes and turns are also ordinary scrolling and pinching: act only where they mean back/forward/rotate
+# two-finger swipes and turns are also ordinary scrolling: act only where they mean back/forward/rotate
 ONLY_IN = {
     'swipe2-left': 'browser', 'swipe2-right': 'browser', 'rotate2-cw': 'images', 'rotate2-ccw': 'images'}
 APP_KINDS = {
@@ -128,6 +125,7 @@ class Touchpad(object):
         self.width_mm = (x1 - self.x0) / float(self.xres)
         self.on_frame, self.on_lost = on_frame, on_lost
         self.slot, self.slots, self.tool = 0, {}, 0
+        self.clicked = False  # pad pressed in this touch: click-and-drag, not a gesture
         self.watch = GLib.io_add_watch(self.fd, GLib.PRIORITY_DEFAULT, GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR,
                                        self._readable)
 
@@ -170,12 +168,18 @@ class Touchpad(object):
                     self.slots[self.slot][0] = (value - self.x0) / float(self.xres)
                 else:
                     self.slots[self.slot][1] = (value - self.y0) / float(self.yres)
+        elif typ == EV_KEY and code == BTN_LEFT:
+            self.clicked = self.clicked or bool(value)
         elif typ == EV_KEY and code in BTN_TOOLS:
             if value:
                 self.tool = BTN_TOOLS[code]
             elif self.tool == BTN_TOOLS[code]:
                 self.tool = 0
         elif typ == EV_SYN and code == SYN_REPORT:
+            if self.clicked:  # a thumb on the button and a finger dragging would look like a gesture
+                self.clicked = bool(self.slots)  # until every finger is lifted
+                self.on_frame(t, [], 0)
+                return
             self.on_frame(t, [tuple(self.slots[s]) for s in sorted(self.slots)], self.tool)
 
 
@@ -453,11 +457,20 @@ class Gestures(object):
             return
         if self.rec.drag3 and ev.startswith('swipe4-'):
             ev = 'swipe3-' + ev[len('swipe4-'):]  # as on a Mac: with three-finger drag, swipes take four fingers
+        if not self.gesture_on(ev):
+            return
         kind = ONLY_IN.get(ev)
         if kind and not any(n in active_class() for n in APP_KINDS[kind]):
             return
         self.last = ev
         self.run(self.action_for(ev))
+
+    def gesture_on(self, gesture):
+        return gesture not in self.app.settings.get('gesture_off', [])
+
+    def set_gesture_on(self, gesture, on):
+        off = set(self.app.settings.get('gesture_off', [])) - {gesture}
+        self.app.settings.set('gesture_off', sorted(off if on else off | {gesture}))
 
     def action_for(self, gesture):
         m = self.app.settings.get('gesture_map', {})
@@ -492,9 +505,10 @@ class Gestures(object):
         elif action in KEYS:
             x.accel(KEYS[action])
         elif action == 'show-desktop':
-            if overview_active():  # leave the overview first, as swiping down does on a Mac
+            if overview_active():  # as on a Mac: the first swipe down only leaves the overview
                 overview_active(False)
-            show_desktop()
+            else:
+                show_desktop()
         elif action in ('tile-left', 'tile-right'):
             tile(action[5:])
         elif action == 'launcher':
@@ -538,7 +552,7 @@ class GesturesPage(core.Page):
     TITLE = 'Touchpad Gestures'
     ICON = 'input-touchpad-symbolic'
     DESC = ('Mac-style touchpad gestures: three fingers up for all windows, sideways for workspaces, '
-            'pinch for all apps, three-finger drag, and more. Choose what each gesture does.')
+            'edge swipes, three-finger drag, and more. Choose what each gesture does.')
 
     def __init__(self, app):
         core.Page.__init__(self, app)
@@ -570,7 +584,13 @@ class GesturesPage(core.Page):
             for g, text, _d in rows:
                 c = self._combo(g)
                 self.combos[g] = c
-                box.append(core.row(text, None, c))
+                sw = Gtk.Switch(active=self.ctl.gesture_on(g), tooltip_text='Turn this gesture on or off')
+                sw.connect('notify::active', lambda w, _p, g=g: self._switched(g, w.get_active()))
+                c.set_sensitive(sw.get_active())
+                r = core.row(text, None, sw)
+                c.set_valign(Gtk.Align.CENTER)
+                r.pack_end(c, False, False, 0)  # left of the switch
+                box.append(r)
             self.add_widget(core.card(*box, title=group))
         self.add_widget(core.card(core.label(
             'Taps: one finger clicks, two fingers right-click, three fingers middle-click (paste, open a link in a '
@@ -589,6 +609,10 @@ class GesturesPage(core.Page):
         c = core.combo(options, current)
         c.connect('changed', lambda w: self._chosen(gesture, w))
         return c
+
+    def _switched(self, gesture, on):
+        self.ctl.set_gesture_on(gesture, on)
+        self.combos[gesture].set_sensitive(on)
 
     def _chosen(self, gesture, combo):
         a = combo.get_active_id()
@@ -611,6 +635,7 @@ class GesturesPage(core.Page):
         parent = old.get_parent()
         new = self._combo(gesture)
         new.set_valign(Gtk.Align.CENTER)
+        new.set_sensitive(self.ctl.gesture_on(gesture))
         parent.remove(old)
         parent.pack_end(new, False, False, 0)
         new.show()

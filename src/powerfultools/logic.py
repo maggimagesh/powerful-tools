@@ -728,8 +728,7 @@ def button_slots(data, rowstride, nch, w, h, count, from_right=True, tolerance=4
 SWIPE_MM = 12  # finger travel that makes a swipe
 FLICK_MM = 25  # two-finger sideways travel for back/forward: longer than a casual horizontal scroll
 FLICK_SECS = 0.6
-PINCH_IN, PINCH_OUT = 0.7, 1.4  # change in finger spread that makes a pinch
-ZOOM_STEP = 1.2  # two-finger pinch zooms one step per 20% change in spread
+SCROLL_MM = 4  # two fingers travelling this far up or down are scrolling: no rotate for the rest of the touch
 ROTATE_DEG = 40
 DRAG_MM = 1.5  # three fingers moving this far start a drag
 EDGE_MM = 6  # a finger this close to the left or right edge starts an edge swipe
@@ -752,7 +751,8 @@ def swipe_direction(dx, dy):
 class GestureRecognizer(object):
     """Turns touchpad frames into gesture names. After every report, feed it the fingers on the pad in mm.
     One gesture per touch: once one fires, nothing more fires until all fingers are lifted, except the
-    continuous ones (zoom steps and three-finger drag)."""
+    continuous three-finger drag. There are no pinch gestures: they fired by accident while scrolling and
+    clicking."""
 
     def __init__(self, width_mm=100.0, drag3=False):
         self.width = width_mm
@@ -778,7 +778,7 @@ class GestureRecognizer(object):
                 c = self._centroid(pts)
                 self.start = (t, c, self._spread(pts, c), self._angle(pts), min(p[0] for p in pts),
                               max(p[0] for p in pts))
-                self.last, self.zoom = c, 1.0
+                self.last = c
                 if n == 3 and self.drag3:
                     self.mode = 'drag-wait'  # not yet: a fourth finger may still land
             return out
@@ -796,16 +796,12 @@ class GestureRecognizer(object):
             out.append(('drag', c[0] - self.last[0], c[1] - self.last[1]))
             self.last = c
             return out
-        if self.mode == 'zoom':
-            return self._zoom(ratio)
         if self.mode is not None:
             return out
         fire = None
         if n >= 3:
             k = min(n, 4)
-            if ratio < PINCH_IN or ratio > PINCH_OUT:
-                fire = 'pinch%d-%s' % (k, 'in' if ratio < 1 else 'out')
-            elif math.hypot(dx, dy) > SWIPE_MM:
+            if math.hypot(dx, dy) > SWIPE_MM:
                 d = swipe_direction(dx, dy)
                 fire = 'swipe%d-%s' % (k, d if k == 3 else d.split('-')[0])
         else:
@@ -816,26 +812,13 @@ class GestureRecognizer(object):
                 fire = 'edge-right'
             elif abs(turn) > ROTATE_DEG and 0.75 < ratio < 1.33:
                 fire = 'rotate2-cw' if turn > 0 else 'rotate2-ccw'  # y grows downwards: a positive turn is clockwise
-            elif ratio > ZOOM_STEP or ratio < 1 / ZOOM_STEP:
-                self.mode, self.locked = 'zoom', True
-                return self._zoom(ratio)
             elif abs(dx) > FLICK_MM and abs(dy) < abs(dx) / 2 and t - t0 < FLICK_SECS:
                 fire = 'swipe2-left' if dx < 0 else 'swipe2-right'
-            elif math.hypot(dx, dy) > FLICK_MM:
+            elif abs(dy) > SCROLL_MM and abs(dy) > abs(dx) or math.hypot(dx, dy) > FLICK_MM:
                 self.mode = 'scroll'  # ordinary scrolling: never turns into a gesture later in this touch
         if fire:
             self.mode, self.locked = 'done', True
             out.append(fire)
-        return out
-
-    def _zoom(self, ratio):
-        out = []
-        while ratio / self.zoom > ZOOM_STEP:
-            self.zoom *= ZOOM_STEP
-            out.append('pinch2-out')
-        while ratio / self.zoom < 1 / ZOOM_STEP:
-            self.zoom /= ZOOM_STEP
-            out.append('pinch2-in')
         return out
 
     @staticmethod
